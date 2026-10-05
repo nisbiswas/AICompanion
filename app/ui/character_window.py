@@ -16,10 +16,7 @@ class CharacterWindow(QWidget):
     # SIGNALS
     # =========================================================
 
-    # Send user messages to the AI worker thread.
     ai_request = Signal(str)
-
-    # Send short voice reactions to the TTS worker thread.
     voice_request = Signal(str, str)
 
     SCALE = 4
@@ -42,17 +39,14 @@ class CharacterWindow(QWidget):
 
         self.ai_worker = AIWorker()
 
-        # Move AI worker away from GUI thread.
         self.ai_worker.moveToThread(
             self.ai_thread
         )
 
-        # GUI -> AI worker
         self.ai_request.connect(
             self.ai_worker.process
         )
 
-        # AI worker -> GUI
         self.ai_worker.finished.connect(
             self.handle_ai_response
         )
@@ -71,17 +65,14 @@ class CharacterWindow(QWidget):
 
         self.voice_worker = VoiceWorker()
 
-        # Move TTS worker away from GUI thread.
         self.voice_worker.moveToThread(
             self.voice_thread
         )
 
-        # GUI -> Voice worker
         self.voice_request.connect(
             self.voice_worker.speak
         )
 
-        # Voice worker -> GUI
         self.voice_worker.error.connect(
             self.handle_voice_error
         )
@@ -95,10 +86,14 @@ class CharacterWindow(QWidget):
         self.character = Character()
 
         self.frame_index = 0
-
         self.base_state = CharacterState.IDLE
-
         self.reaction_active = False
+
+        # =====================================================
+        # READ-ALOUD STATE
+        # =====================================================
+
+        self.pending_read_aloud_text = None
 
         # =====================================================
         # WINDOW
@@ -313,12 +308,10 @@ class CharacterWindow(QWidget):
 
             return
 
-        # Remember normal state.
         self.base_state = (
             self.character.state
         )
 
-        # Switch to reaction.
         self.character.set_state(
             reaction_state
         )
@@ -351,7 +344,7 @@ class CharacterWindow(QWidget):
         self.load_animation()
 
     # =========================================================
-    # SPEECH
+    # SPEECH BUBBLE
     # =========================================================
 
     def say(self, text: str):
@@ -414,20 +407,17 @@ class CharacterWindow(QWidget):
 
         character_rect = self.frameGeometry()
 
-        # Place input to the LEFT of Hornet.
         x = (
             character_rect.left()
             - self.chat_input.width()
             - 20
         )
 
-        # Vertically center it with Hornet.
         y = (
             character_rect.center().y()
             - self.chat_input.height() // 2
         )
 
-        # Keep inside monitor horizontally.
         x = max(
             available.left() + 10,
             min(
@@ -438,7 +428,6 @@ class CharacterWindow(QWidget):
             ),
         )
 
-        # Keep inside monitor vertically.
         y = max(
             available.top() + 10,
             min(
@@ -451,7 +440,7 @@ class CharacterWindow(QWidget):
 
         self.chat_input.move(
             x,
-            y,
+            y
         )
 
         self.chat_input.show()
@@ -475,19 +464,73 @@ class CharacterWindow(QWidget):
 
         self.hide_input()
 
-        # Tell user that Hornet is processing.
+        text = text.strip()
+
+        if not text:
+            return
+
+        # =====================================================
+        # READ-ALOUD CONFIRMATION
+        # =====================================================
+
+        if self.pending_read_aloud_text is not None:
+
+            normalized = text.lower().strip()
+
+            yes_answers = {
+                "yes",
+                "yeah",
+                "yep",
+                "yup",
+                "sure",
+                "okay",
+                "ok",
+                "please",
+                "read it",
+                "read it to me",
+                "go ahead",
+            }
+
+            no_answers = {
+                "no",
+                "nope",
+                "nah",
+                "not now",
+                "no thanks",
+                "don't",
+                "dont",
+            }
+
+            if normalized in yes_answers:
+
+                text_to_read = (
+                    self.pending_read_aloud_text
+                )
+
+                self.pending_read_aloud_text = None
+
+                self.voice_request.emit(
+                    text_to_read,
+                    "NEUTRAL",
+                )
+
+                return
+
+            if normalized in no_answers:
+
+                self.pending_read_aloud_text = None
+
+                return
+
+            self.pending_read_aloud_text = None
+
+        # =====================================================
+        # NORMAL AI REQUEST
+        # =====================================================
+
         self.say(
             "Hmm..."
         )
-
-        # Send message to AI worker.
-        #
-        # IMPORTANT:
-        #
-        # We do NOT call the AI directly here.
-        #
-        # The GUI remains responsive while Ollama
-        # generates the response.
 
         self.ai_request.emit(
             text
@@ -507,6 +550,21 @@ class CharacterWindow(QWidget):
 
         emotion = response.emotion.value
 
+        print(
+            "VOICE LINE:",
+            repr(response.voice_line),
+        )
+
+        print(
+            "READ ALOUD:",
+            response.read_aloud,
+        )
+
+        print(
+            "EMOTION:",
+            emotion,
+        )
+
         # -----------------------------------------------------
         # CHARACTER REACTION
         # -----------------------------------------------------
@@ -516,87 +574,59 @@ class CharacterWindow(QWidget):
         )
 
         # -----------------------------------------------------
-        # FULL TEXT RESPONSE
+        # FULL RESPONSE
         # -----------------------------------------------------
-
-        # The complete AI response is shown in the
-        # speech bubble.
-        #
-        # It is NOT sent to TTS.
 
         self.say(
             response.response
         )
 
         # -----------------------------------------------------
-        # SHORT VOICE REACTION
+        # READ-ALOUD
         # -----------------------------------------------------
 
-        voice_line = self.get_voice_line(
-            emotion
+        if response.read_aloud:
+
+            self.pending_read_aloud_text = (
+                response.response
+            )
+
+        else:
+
+            self.pending_read_aloud_text = None
+
+        # -----------------------------------------------------
+        # CONTEXTUAL VOICE
+        # -----------------------------------------------------
+
+        voice_line = (
+            response.voice_line.strip()
+            if response.voice_line
+            else ""
         )
 
         if voice_line:
+
+            print(
+                "SPEAKING:",
+                repr(voice_line),
+            )
 
             self.voice_request.emit(
                 voice_line,
                 emotion,
             )
 
-    def get_voice_line(
-        self,
-        emotion: str,
-    ) -> str | None:
-
-        emotion = emotion.upper()
-
-        voice_lines = {
-
-            # Normal response.
-            "NEUTRAL":
-                "Hmm... look at this.",
-
-            # Happy / playful.
-            "HAPPY":
-                "Hehe... look at this.",
-
-            # Shy.
-            #
-            # The "...", combined with the slower
-            # TTS speed, creates a small pause.
-            "SHY":
-                "Umm... here...",
-
-            # Annoyed / slightly aggressive.
-            "ANNOYED":
-                "Tch... seriously?",
-
-            # Sad.
-            "SAD":
-                "Hmm... that's unfortunate.",
-
-            # Curious.
-            "CURIOUS":
-                "Hmm? What's this?",
-
-            # Surprised.
-            "SURPRISED":
-                "W-Wait... what?",
-
-            # Thinking.
-            "THINKING":
-                "Hmm...",
-        }
-
-        return voice_lines.get(
-            emotion,
-            "Hmm...",
-        )
+    # =========================================================
+    # AI ERROR
+    # =========================================================
 
     def handle_ai_error(
         self,
         error: str,
     ):
+
+        self.pending_read_aloud_text = None
 
         self.say(
             "Sorry... something went wrong."
@@ -608,7 +638,7 @@ class CharacterWindow(QWidget):
         )
 
     # =========================================================
-    # VOICE
+    # VOICE ERROR
     # =========================================================
 
     def handle_voice_error(
@@ -616,12 +646,14 @@ class CharacterWindow(QWidget):
         error: str,
     ):
 
-        # Voice failure should NOT break the
-        # character or AI response.
+        print(
+            "========== VOICE ERROR =========="
+        )
+
+        print(error)
 
         print(
-            "VOICE ERROR:",
-            error,
+            "================================="
         )
 
     # =========================================================
@@ -662,12 +694,10 @@ class CharacterWindow(QWidget):
         event,
     ):
 
-        # Stop AI thread.
         self.ai_thread.quit()
 
         self.ai_thread.wait()
 
-        # Stop voice thread.
         self.voice_thread.quit()
 
         self.voice_thread.wait()

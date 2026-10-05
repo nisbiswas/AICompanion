@@ -1,7 +1,5 @@
 import json
 
-from app.tools import tool_request
-
 from .ollama_client import OllamaClient
 from .prompts import SYSTEM_PROMPT
 from .response import (
@@ -10,10 +8,12 @@ from .response import (
     AgentIntent,
     AgentEmotion,
 )
+
 from app.memory.memory import Memory
 from app.memory.memory_extractor import MemoryExtractor
 from app.config import PROJECT_ROOT
 from app.tools.registry import ToolRegistry
+from app.ai.context import ConversationContext
 
 
 class CompanionAgent:
@@ -24,13 +24,10 @@ class CompanionAgent:
 
         self.memory = Memory()
         self.memory_extractor = MemoryExtractor()
+
         self.tools = ToolRegistry(PROJECT_ROOT)
-        self.messages = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            }
-        ]
+
+        self.context = ConversationContext()
 
     def _build_memory_context(self) -> str:
 
@@ -43,6 +40,30 @@ class CompanionAgent:
             f"- {fact}"
             for fact in facts
         )
+
+    def _build_messages(self) -> list[dict]:
+
+        memory_context = self._build_memory_context()
+
+        messages = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "system",
+                "content": (
+                    "Known memories about the user:\n"
+                    f"{memory_context}"
+                ),
+            },
+        ]
+
+        messages.extend(
+            self.context.get_messages()
+        )
+
+        return messages
 
     def _execute_tool(self, tool_request: dict) -> str:
 
@@ -68,97 +89,193 @@ class CompanionAgent:
 
         return f"Unknown tool: {tool_name}"
 
-    def respond(self, user_message: str) -> AgentResponse:
+    def _parse_response(self, raw_response: str) -> AgentResponse:
+        try:
+            data = json.loads(raw_response)
 
-        self.messages.append(
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        )
+            response_text = str(
+                data.get("response", "")
+            ).strip()
 
-        memory_context = self._build_memory_context()
+            voice_line = str(
+                data.get("voice_line", "")
+            ).strip()
 
-        self.messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "Known memories about the user:\n"
-                    f"{memory_context}"
+            # If the model doesn't provide a voice line,
+            # create a short spoken version from the response.
+            #
+            # This keeps the voice pipeline working even if
+            # the local model occasionally omits the optional
+            # voice field.
+            if not voice_line:
+                print("WARNING: Qwen did not provide a voice_line.")
+
+            return AgentResponse(
+                response=response_text,
+
+                state=AgentState(
+                    data.get(
+                    "state",
+                    "TALKING",
+                 )
                 ),
-            }
+
+                intent=AgentIntent(
+                    data.get(
+                    "intent",
+                    "CONVERSATION",
+                    )
+                ),
+
+                permission_required=bool(
+                data.get(
+                    "permission_required",
+                    False,
+                )
+            ),
+
+                voice_line=voice_line,
+
+                read_aloud=bool(
+                    data.get(
+                        "read_aloud",
+                        False,
+                    )
+                ),
+
+                tool_request=data.get(
+                "tool_request"
+                ),
+
+                emotion=AgentEmotion(
+                    data.get(
+                    "emotion",
+                    "NEUTRAL",
+                    )
+                ),
+            )
+
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            ValueError,
+        ) as error:
+
+            print(
+            "========== RESPONSE PARSE ERROR =========="
+            )
+            print(
+            "RAW RESPONSE:"
+            )
+            print(raw_response)
+            print(
+                "ERROR:",
+                error,
+            )
+            print(
+                "==========================================="
+            )
+
+            return AgentResponse(
+                response=(
+                    "I had trouble understanding "
+                    "my own response."
+                ),
+
+                state=AgentState.CONFUSED,
+
+                intent=AgentIntent.CLARIFICATION,
+
+                permission_required=False,
+
+                voice_line=(
+                    "Hmm... something went wrong "
+                    "while I was thinking."
+                ),
+
+                read_aloud=False,
+
+                tool_request=None,
+
+                emotion=AgentEmotion.NEUTRAL,
+            )
+
+    def respond(
+        self,
+        user_message: str,
+    ) -> AgentResponse:
+
+        user_message = user_message.strip()
+
+        if not user_message:
+            return None
+
+        self.context.add_user_message(
+            user_message
         )
 
+        max_tool_calls = 3
 
-        max_tool_calls=3
+        response = None
 
         for _ in range(max_tool_calls):
-            raw_response = self.llm.chat(self.messages)
 
-            try:
-                data = json.loads(raw_response)
+            messages = self._build_messages()
 
-                response = AgentResponse(
-                            response=data["response"],
-                            state=AgentState(data["state"]),
-                            intent=AgentIntent(data["intent"]),
-                            permission_required=bool(
-                                data["permission_required"]
-                            ),
-                            tool_request=data.get("tool_request"),
-                            emotion=AgentEmotion(data.get("emotion", "NEUTRAL"))
-                            )
+            raw_response = self.llm.chat(
+                messages
+            )
 
-            except (json.JSONDecodeError, KeyError, ValueError) as error:
+            response = self._parse_response(
+                raw_response
+            )
 
-                response = AgentResponse(
-                        response=(
-                        "I had trouble understanding my own response. "
-                        f"Internal error: {error}"
-                            ),
-                        state=AgentState.CONFUSED,
-                        intent=AgentIntent.CLARIFICATION,
-                        permission_required=False,
-                        tool_request=None,
-                        emotion=AgentEmotion.NEUTRAL,
-)
-                return response
-
-            self.messages.append(
-                {
-                    "role": "assistant",
-                    "content": raw_response,
-                }
+            self.context.add_assistant_message(
+                raw_response
             )
 
             if not response.tool_request:
                 break
 
             try:
-                tool_result = self._execute_tool(response.tool_request)
+
+                tool_result = self._execute_tool(
+                    response.tool_request
+                )
+
             except Exception as error:
+
                 tool_result = (
                     f"Error executing tool: {error}"
                 )
 
-            self.messages.append(
-                {
-                    "role": "user",
-                     "content": (
+            self.context.add_user_message(
+                (
                     "TOOL RESULT\n"
-                    f"Tool: {response.tool_request.get('tool')}\n"
-                    f"Result:\n{tool_result}\n\n"
-                    "Use this tool result to answer the original "
-                    "user request. If more information is needed, "
-                    "you may request another available read-only tool."
-                ),
-                }
+                    f"Tool: "
+                    f"{response.tool_request.get('tool')}\n"
+                    f"Result:\n"
+                    f"{tool_result}\n\n"
+                    "Use this tool result to answer the "
+                    "original user request. "
+                    "If more information is needed, "
+                    "you may request another available "
+                    "read-only tool."
+                )
             )
 
-        fact = self.memory_extractor.extract(user_message)
+        fact = self.memory_extractor.extract(
+            user_message
+        )
 
         if fact:
-            self.memory.add_fact(fact)
-            print(f"Memory updated with new fact: {fact}")
+
+            self.memory.add_fact(
+                fact
+            )
+
+            print(
+                f"Memory updated with new fact: {fact}"
+            )
 
         return response

@@ -36,5 +36,9 @@ class AgentResponse:
     state: AgentState
     intent: AgentIntent
     permission_required: bool
+
+    voice_line: str = ""
+    read_aloud: bool = False
+
     tool_request: dict | None = None
     emotion: AgentEmotion = AgentEmotion.NEUTRAL
