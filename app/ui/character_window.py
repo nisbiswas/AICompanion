@@ -8,6 +8,8 @@ from app.ui.chat_input import ChatInput
 from app.ui.speech_bubble import SpeechBubble
 from app.ui.ai_worker import AIWorker
 from app.voice.worker import VoiceWorker
+from app.character.cursor_tracker import CursorTracker
+from PySide6.QtGui import QTransform
 
 
 class CharacterWindow(QWidget):
@@ -88,6 +90,7 @@ class CharacterWindow(QWidget):
         self.frame_index = 0
         self.base_state = CharacterState.IDLE
         self.reaction_active = False
+        self.facing_right = False
 
         # =====================================================
         # READ-ALOUD STATE
@@ -197,10 +200,23 @@ class CharacterWindow(QWidget):
             5000,
             self.hide_speech,
         )
+        ## cursor tracker
 
+        
+        self.cursor_tracker = CursorTracker(self)
+        self.cursor_tracker.start()
     # =========================================================
     # ANIMATION
     # =========================================================
+    
+    def set_facing_right(self, facing_right: bool):
+        if self.facing_right == facing_right:
+            return
+
+        self.facing_right = facing_right
+
+        # Re-render the current animation frame.
+        self.load_animation()
 
     def load_animation(self):
 
@@ -237,6 +253,11 @@ class CharacterWindow(QWidget):
             Qt.KeepAspectRatio,
             Qt.FastTransformation,
         )
+
+        if self.facing_right:
+            frame = frame.transformed(
+                QTransform().scale(-1, 1)
+            )
 
         self.label.resize(
             frame.size()
