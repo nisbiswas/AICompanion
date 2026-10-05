@@ -4,7 +4,12 @@ from app.tools import tool_request
 
 from .ollama_client import OllamaClient
 from .prompts import SYSTEM_PROMPT
-from .response import AgentResponse, AgentState, AgentIntent
+from .response import (
+    AgentResponse,
+    AgentState,
+    AgentIntent,
+    AgentEmotion,
+)
 from app.memory.memory import Memory
 from app.memory.memory_extractor import MemoryExtractor
 from app.config import PROJECT_ROOT
@@ -94,28 +99,29 @@ class CompanionAgent:
                 data = json.loads(raw_response)
 
                 response = AgentResponse(
-                    response=data["response"],
-                    state=AgentState(data["state"]),
-                    intent=AgentIntent(data["intent"]),
-                    permission_required=bool(
-                        data["permission_required"]
-                    ),
-                    tool_request=data.get("tool_request"),
-                )
+                            response=data["response"],
+                            state=AgentState(data["state"]),
+                            intent=AgentIntent(data["intent"]),
+                            permission_required=bool(
+                                data["permission_required"]
+                            ),
+                            tool_request=data.get("tool_request"),
+                            emotion=AgentEmotion(data.get("emotion", "NEUTRAL"))
+                            )
 
             except (json.JSONDecodeError, KeyError, ValueError) as error:
 
                 response = AgentResponse(
-                    response=(
+                        response=(
                         "I had trouble understanding my own response. "
                         f"Internal error: {error}"
-                    ),
-                    state=AgentState.CONFUSED,
-                    intent=AgentIntent.CLARIFICATION,
-                    permission_required=False,
-                    tool_request=None,
-                )
-
+                            ),
+                        state=AgentState.CONFUSED,
+                        intent=AgentIntent.CLARIFICATION,
+                        permission_required=False,
+                        tool_request=None,
+                        emotion=AgentEmotion.NEUTRAL,
+)
                 return response
 
             self.messages.append(

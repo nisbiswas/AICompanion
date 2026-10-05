@@ -19,6 +19,17 @@ class AgentIntent(str, Enum):
     GENERAL_QUESTION = "GENERAL_QUESTION"
 
 
+class AgentEmotion(str, Enum):
+    NEUTRAL = "NEUTRAL"
+    HAPPY = "HAPPY"
+    SHY = "SHY"
+    ANNOYED = "ANNOYED"
+    SAD = "SAD"
+    CURIOUS = "CURIOUS"
+    SURPRISED = "SURPRISED"
+    THINKING = "THINKING"
+
+
 @dataclass
 class AgentResponse:
     response: str
@@ -26,3 +37,4 @@ class AgentResponse:
     intent: AgentIntent
     permission_required: bool
     tool_request: dict | None = None
+    emotion: AgentEmotion = AgentEmotion.NEUTRAL
