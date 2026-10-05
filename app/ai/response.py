@@ -25,3 +25,4 @@ class AgentResponse:
     state: AgentState
     intent: AgentIntent
     permission_required: bool
+    tool_request: dict | None = None

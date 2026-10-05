@@ -1,10 +1,14 @@
 import json
 
+from app.tools import tool_request
+
 from .ollama_client import OllamaClient
 from .prompts import SYSTEM_PROMPT
 from .response import AgentResponse, AgentState, AgentIntent
-from memory.memory import Memory
-from memory.memory_extractor import MemoryExtractor
+from app.memory.memory import Memory
+from app.memory.memory_extractor import MemoryExtractor
+from app.config import PROJECT_ROOT
+from app.tools.registry import ToolRegistry
 
 
 class CompanionAgent:
@@ -15,7 +19,7 @@ class CompanionAgent:
 
         self.memory = Memory()
         self.memory_extractor = MemoryExtractor()
-
+        self.tools = ToolRegistry(PROJECT_ROOT)
         self.messages = [
             {
                 "role": "system",
@@ -34,6 +38,30 @@ class CompanionAgent:
             f"- {fact}"
             for fact in facts
         )
+
+    def _execute_tool(self, tool_request: dict) -> str:
+
+        tool_name = tool_request.get("tool")
+        arguments = tool_request.get("arguments", {})
+
+        if tool_name == "list_directory":
+
+            path = arguments.get("path", ".")
+
+            result = self.tools.list_directory(path)
+
+            return "\n".join(result)
+
+        if tool_name == "read_file":
+
+            path = arguments.get("path")
+
+            if not path:
+                return "Error: read_file requires a path."
+
+            return self.tools.read_file(path)
+
+        return f"Unknown tool: {tool_name}"
 
     def respond(self, user_message: str) -> AgentResponse:
 
@@ -56,43 +84,75 @@ class CompanionAgent:
             }
         )
 
-        raw_response = self.llm.chat(self.messages)
 
-        try:
-            data = json.loads(raw_response)
+        max_tool_calls=3
 
-            response = AgentResponse(
-                response=data["response"],
-                state=AgentState(data["state"]),
-                intent=AgentIntent(data["intent"]),
-                permission_required=bool(
-                    data["permission_required"]
-                ),
+        for _ in range(max_tool_calls):
+            raw_response = self.llm.chat(self.messages)
+
+            try:
+                data = json.loads(raw_response)
+
+                response = AgentResponse(
+                    response=data["response"],
+                    state=AgentState(data["state"]),
+                    intent=AgentIntent(data["intent"]),
+                    permission_required=bool(
+                        data["permission_required"]
+                    ),
+                    tool_request=data.get("tool_request"),
+                )
+
+            except (json.JSONDecodeError, KeyError, ValueError) as error:
+
+                response = AgentResponse(
+                    response=(
+                        "I had trouble understanding my own response. "
+                        f"Internal error: {error}"
+                    ),
+                    state=AgentState.CONFUSED,
+                    intent=AgentIntent.CLARIFICATION,
+                    permission_required=False,
+                    tool_request=None,
+                )
+
+                return response
+
+            self.messages.append(
+                {
+                    "role": "assistant",
+                    "content": raw_response,
+                }
             )
 
-        except (json.JSONDecodeError, KeyError, ValueError) as error:
+            if not response.tool_request:
+                break
 
-            response = AgentResponse(
-                response=(
-                    "I had trouble understanding my own response. "
-                    f"Internal error: {error}"
+            try:
+                tool_result = self._execute_tool(response.tool_request)
+            except Exception as error:
+                tool_result = (
+                    f"Error executing tool: {error}"
+                )
+
+            self.messages.append(
+                {
+                    "role": "user",
+                     "content": (
+                    "TOOL RESULT\n"
+                    f"Tool: {response.tool_request.get('tool')}\n"
+                    f"Result:\n{tool_result}\n\n"
+                    "Use this tool result to answer the original "
+                    "user request. If more information is needed, "
+                    "you may request another available read-only tool."
                 ),
-                state=AgentState.CONFUSED,
-                intent=AgentIntent.CLARIFICATION,
-                permission_required=False,
+                }
             )
-
-        self.messages.append(
-            {
-                "role": "assistant",
-                "content": raw_response,
-            }
-        )
 
         fact = self.memory_extractor.extract(user_message)
 
         if fact:
             self.memory.add_fact(fact)
-            print(f"[Memory] Stored: {fact}")
+            print(f"Memory updated with new fact: {fact}")
 
         return response

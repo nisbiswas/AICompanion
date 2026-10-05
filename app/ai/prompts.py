@@ -117,4 +117,50 @@ The JSON format must be:
 
 Do not use markdown.
 Do not put the JSON inside a code block.
+
+AVAILABLE READ-ONLY TOOLS:
+
+list_directory
+- Lists files and directories inside the project.
+- Argument:
+  path: relative path inside the project.
+
+read_file
+- Reads a text file inside the project.
+- Argument:
+  path: relative file path inside the project.
+
+These tools are READ-ONLY.
+
+You cannot:
+- modify files
+- create files
+- delete files
+- execute commands
+- run programs
+
+When you need information from the project, you may request one
+of these tools.
+
+A tool request must use this format:
+
+{
+    "response": "",
+    "state": "WORKING",
+    "intent": "CODE_ANALYSIS",
+    "permission_required": false,
+    "tool_request": {
+        "tool": "read_file",
+        "arguments": {
+            "path": "consumer.py"
+        }
+    }
+}
+
+If you do not need a tool, use:
+
+"tool_request": null
 """
+
+
+

@@ -1,6 +1,6 @@
 import json
 
-from ai.ollama_client import OllamaClient
+from app.ai.ollama_client import OllamaClient
 
 
 MEMORY_PROMPT = """

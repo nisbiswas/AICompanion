@@ -1,5 +1,4 @@
-from ai.agent import CompanionAgent
-
+from app.ai.agent import CompanionAgent
 
 def main():
 
