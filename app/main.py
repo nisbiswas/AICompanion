@@ -1,35 +1,42 @@
-from app.ai.agent import CompanionAgent
+import sys
+
+from PySide6.QtWidgets import QApplication
+
+from app.character.controller import CharacterController
+from app.ui.character_window import CharacterWindow
+
 
 def main():
 
-    agent = CompanionAgent()
+    # ---------------------------------------------------------
+    # Qt application
+    # ---------------------------------------------------------
 
-    print("================================")
-    print("       AI Companion")
-    print("================================")
-    print("Type 'exit' to quit.\n")
+    app = QApplication(sys.argv)
 
-    while True:
+    # ---------------------------------------------------------
+    # Character controller
+    # ---------------------------------------------------------
 
-        user_input = input("You: ").strip()
+    controller = CharacterController()
 
-        if user_input.lower() == "exit":
-            break
+    # ---------------------------------------------------------
+    # Character window
+    # ---------------------------------------------------------
 
-        try:
-            result = agent.respond(user_input)
+    window = CharacterWindow(
+        controller
+    )
 
-            print(f"\nCompanion: {result.response}")
-            print(f"State: {result.state.value}")
-            print(f"Intent: {result.intent.value}")
-            print(
-                f"Permission required: "
-                f"{result.permission_required}"
-            )
-            print()
+    window.show()
 
-        except Exception as error:
-            print(f"\nError: {error}\n")
+    # ---------------------------------------------------------
+    # Start application
+    # ---------------------------------------------------------
+
+    sys.exit(
+        app.exec()
+    )
 
 
 if __name__ == "__main__":

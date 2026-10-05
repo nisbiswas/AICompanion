@@ -18,3 +18,10 @@ __pycache__/
 Thumbs.db
 data/
 config.py
+
+# TTS model files
+tts/*.onnx
+tts/*.bin
+
+# Generated audio
+tts/*.wav

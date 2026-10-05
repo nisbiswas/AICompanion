@@ -12,6 +12,7 @@ class Character:
             / "hornet"
         )
 
+        # Normal activity state
         self.state = CharacterState.IDLE
 
         self.animations = {
@@ -19,24 +20,33 @@ class Character:
                 "path": self.assets_dir / "hornet_idle_pixel.png",
                 "frames": 2,
             },
+
             CharacterState.RUN: {
                 "path": self.assets_dir / "hornet_run_pixel.png",
                 "frames": 2,
             },
+
             CharacterState.SITTING: {
                 "path": self.assets_dir / "hornet_sitting_pixel.png",
                 "frames": 1,
             },
+
             CharacterState.TAUNT: {
                 "path": self.assets_dir / "hornet_taunt_pixel.png",
                 "frames": 1,
             },
+
             CharacterState.ATTACK: {
                 "path": self.assets_dir / "pixel_hornet_attack.png",
-                "frames": 1,
+                "frames": 4,
             },
         }
 
+        # Temporary mapping.
+        #
+        # IMPORTANT:
+        # THINKING stays IDLE because thinking is not a permanent
+        # physical activity.
         self.emotion_animation_map = {
             "NEUTRAL": CharacterState.IDLE,
             "HAPPY": CharacterState.TAUNT,
@@ -45,7 +55,7 @@ class Character:
             "SAD": CharacterState.SITTING,
             "CURIOUS": CharacterState.IDLE,
             "SURPRISED": CharacterState.ATTACK,
-            "THINKING": CharacterState.SITTING,
+            "THINKING": CharacterState.IDLE,
         }
 
     def set_state(self, state: CharacterState):
