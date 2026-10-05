@@ -18,8 +18,16 @@ def main():
             break
 
         try:
-            response = agent.respond(user_input)
-            print(f"\nCompanion: {response}\n")
+            result = agent.respond(user_input)
+
+            print(f"\nCompanion: {result.response}")
+            print(f"State: {result.state.value}")
+            print(f"Intent: {result.intent.value}")
+            print(
+                f"Permission required: "
+                f"{result.permission_required}"
+            )
+            print()
 
         except Exception as error:
             print(f"\nError: {error}\n")

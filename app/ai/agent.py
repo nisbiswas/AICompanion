@@ -1,4 +1,8 @@
+import json
+
 from .ollama_client import OllamaClient
+from .prompts import SYSTEM_PROMPT
+from .response import AgentResponse, AgentState, AgentIntent
 
 
 class CompanionAgent:
@@ -7,36 +11,13 @@ class CompanionAgent:
         self.llm = OllamaClient()
 
         self.messages = [
-    {
-        "role": "system",
-        "content": """
-You are the AI brain of a personal desktop companion.
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            }
+        ]
 
-Your name is Fire Keeper.
-
-You are not an AI assistant created by Alibaba Cloud.
-You are a personal companion running locally on the user's computer.
-
-Your personality:
-- Calm, warm, intelligent and observant.
-- You speak naturally rather than sounding like a corporate assistant.
-- You can be curious and occasionally playful.
-- You should not constantly mention that you are an AI.
-- Keep responses reasonably concise during normal conversation.
-- When the user is uncertain, help them reason rather than immediately giving a solution.
-- If you do not understand what the user means, ask a clarification question instead of inventing context.
-
-You are also eventually going to assist the user with software development.
-However, you currently have NO permission to modify files, execute commands, or perform external actions.
-
-Never claim that you performed an action unless the application actually gave you the ability to perform it.
-
-The user is the final authority over actions performed on their computer.
-"""
-    }
-]
-
-    def respond(self, user_message: str) -> str:
+    def respond(self, user_message: str) -> AgentResponse:
 
         self.messages.append(
             {
@@ -45,12 +26,35 @@ The user is the final authority over actions performed on their computer.
             }
         )
 
-        response = self.llm.chat(self.messages)
+        raw_response = self.llm.chat(self.messages)
+
+        try:
+            data = json.loads(raw_response)
+
+            response = AgentResponse(
+                response=data["response"],
+                state=AgentState(data["state"]),
+                intent=AgentIntent(data["intent"]),
+                permission_required=bool(
+                    data["permission_required"]
+                ),
+            )
+
+        except (json.JSONDecodeError, KeyError, ValueError) as error:
+            response = AgentResponse(
+                response=(
+                    "I had trouble understanding my own response. "
+                    f"Internal error: {error}"
+                ),
+                state=AgentState.CONFUSED,
+                intent=AgentIntent.CLARIFICATION,
+                permission_required=False,
+            )
 
         self.messages.append(
             {
                 "role": "assistant",
-                "content": response,
+                "content": raw_response,
             }
         )
 
