@@ -1,6 +1,7 @@
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.character.controller import CharacterController
+from app.permissions.manager import PermissionManager
 
 
 class AIWorker(QObject):
@@ -8,15 +9,24 @@ class AIWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
 
-    def __init__(self):
+    def __init__(
+        self,
+        permissions: PermissionManager,
+    ):
         super().__init__()
 
-        self.controller = CharacterController()
+        self.controller = CharacterController(
+            permissions=permissions
+        )
 
     @Slot(str)
-    def process(self, message: str):
+    def process(
+        self,
+        message: str,
+    ):
 
         try:
+
             response = self.controller.respond_to_user(
                 message
             )
@@ -24,6 +34,7 @@ class AIWorker(QObject):
             self.finished.emit(response)
 
         except Exception as exc:
+
             self.error.emit(str(exc))
 
     @Slot(object)
@@ -33,9 +44,11 @@ class AIWorker(QObject):
     ):
 
         try:
+
             self.controller.set_browser_context(
                 browser_context
             )
 
         except Exception as exc:
+
             self.error.emit(str(exc))

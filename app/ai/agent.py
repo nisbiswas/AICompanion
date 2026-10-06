@@ -14,11 +14,15 @@ from app.memory.memory_extractor import MemoryExtractor
 from app.config import PROJECT_ROOT
 from app.tools.registry import ToolRegistry
 from app.ai.context import ConversationContext
+from app.permissions.manager import PermissionManager, Permission
 
 
 class CompanionAgent:
 
-    def __init__(self):
+    def __init__(
+            self,
+            permissions: PermissionManager | None = None,
+    ):
 
         self.llm = OllamaClient()
 
@@ -34,6 +38,8 @@ class CompanionAgent:
         self.context = ConversationContext()
 
         self.browser_context = {}
+
+        self.permissions=permissions or PermissionManager()
 
     def set_browser_context(self, browser_context: dict):
         self.browser_context = dict(browser_context)
@@ -176,7 +182,58 @@ class CompanionAgent:
 
             return self.tools.read_file(path)
 
+        if tool_name == "web_search":
+
+            print(f"TOOL REQUEST: web_search -> {arguments}")
+
+            if not self.permissions.is_allowed(
+                Permission.WEB_SEARCH
+            ):
+                return (
+                    "WEB_SEARCH permission is not granted. "
+                    "You cannot search the internet."
+                )
+
+            query = arguments.get("query", "").strip()
+
+            if not query:
+                return (
+                    "Error: web_search requires a query."
+                )
+
+            limit = arguments.get("limit", 5)
+
+            try:
+                limit = int(limit)
+            except (TypeError, ValueError):
+                limit = 5
+
+            limit = max(1, min(limit, 10))
+
+            results = self.tools.search_web(
+                query,
+                limit,
+            )
+
+            if not results:
+                return "No search results found."
+
+            lines = []
+
+            for index, result in enumerate(
+                results,
+                start=1,
+            ):
+                lines.append(
+                    f"{index}. {result['title']}\n"
+                    f"URL: {result['url']}\n"
+                    f"Summary: {result['content']}"
+                )
+
+            return "\n\n".join(lines)
+
         return f"Unknown tool: {tool_name}"
+        
 
     def _parse_response(self, raw_response: str) -> AgentResponse:
         try:

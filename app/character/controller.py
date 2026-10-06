@@ -1,11 +1,17 @@
 from app.ai.agent import CompanionAgent
 from app.ai.response import AgentResponse
+from app.permissions.manager import PermissionManager
 
 
 class CharacterController:
 
-    def __init__(self):
-        self.agent = CompanionAgent()
+    def __init__(
+        self,
+        permissions: PermissionManager | None = None,
+    ):
+        self.agent = CompanionAgent(
+            permissions=permissions
+        )
 
     def respond_to_user(
         self,
@@ -23,6 +29,7 @@ class CharacterController:
         self,
         browser_context: dict,
     ):
+
         self.agent.set_browser_context(
             browser_context
         )
