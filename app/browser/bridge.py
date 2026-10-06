@@ -58,16 +58,20 @@ class BrowserBridge(QObject):
                         body.decode("utf-8")
                     )
 
+                    page_text = str(
+                        data.get("page_text", "")
+                        )
+
                     event = context.update(
-                        browser=str(
-                            data.get("browser", "")
-                        ),
-                        title=str(
-                            data.get("title", "")
-                        ),
-                        url=str(
-                            data.get("url", "")
-                        ),
+                        browser=str(data.get("browser", "")),
+                        title=str(data.get("title", "")),
+                        url=str(data.get("url", "")),
+                        page_text=page_text,
+                    )
+
+                    print(
+                        "PAGE TEXT:",
+                        page_text[:500].replace("\n"," ")
                     )
 
                     if event:

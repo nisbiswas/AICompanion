@@ -12,6 +12,7 @@ class BrowserEvent:
     browser: str
     title: str
     url: str
+    page_text: str = ""
     previous_title: str = ""
     previous_url: str = ""
 
@@ -21,6 +22,8 @@ class BrowserEvent:
             "browser": self.browser,
             "title": self.title,
             "url": self.url,
+            "page_text": self.page_text,
             "previous_title": self.previous_title,
             "previous_url": self.previous_url,
         }
+
