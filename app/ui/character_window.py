@@ -45,8 +45,12 @@ class CharacterWindow(QWidget):
         # =====================================================
 
         self.ai_thread = QThread(self)
+        
+        self.permissions = PermissionManager()
 
-        self.ai_worker = AIWorker()
+        self.ai_worker = AIWorker(
+            self.permissions
+        )
 
         self.ai_worker.moveToThread(
             self.ai_thread
@@ -220,7 +224,10 @@ class CharacterWindow(QWidget):
         # BROWSER CONTEXT
         # =====================================================
 
-        self.permissions = PermissionManager()
+
+        # self.ai_worker = AIWorker(
+        #     self.permissions
+        # )
 
         self.browser_context = BrowserContext()
 
@@ -244,6 +251,11 @@ class CharacterWindow(QWidget):
             Permission.BROWSER_PAGE_READ
         )
 
+        self.permissions.grant(
+            Permission.WEB_SEARCH
+        )
+
+        
         self.browser_bridge.start()
 
         # Debug browser context while testing.
@@ -617,6 +629,7 @@ class CharacterWindow(QWidget):
         if response is None:
             return
 
+
         emotion = response.emotion.value
 
         print(
@@ -637,7 +650,9 @@ class CharacterWindow(QWidget):
         # -----------------------------------------------------
         # CHARACTER REACTION
         # -----------------------------------------------------
+        
 
+        
         self.play_emotion(
             emotion
         )
