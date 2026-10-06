@@ -3,13 +3,26 @@ from app.ai.response import AgentResponse
 
 
 class CharacterController:
+
     def __init__(self):
         self.agent = CompanionAgent()
 
-    def respond_to_user(self, message: str) -> AgentResponse:
+    def respond_to_user(
+        self,
+        message: str,
+    ) -> AgentResponse:
+
         message = message.strip()
 
         if not message:
             return None
 
         return self.agent.respond(message)
+
+    def set_browser_context(
+        self,
+        browser_context: dict,
+    ):
+        self.agent.set_browser_context(
+            browser_context
+        )

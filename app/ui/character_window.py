@@ -13,6 +13,7 @@ from PySide6.QtGui import QTransform
 from app.browser.context import BrowserContext
 from app.browser.bridge import BrowserBridge
 from app.permissions.manager import PermissionManager, Permission
+from app.behavior.controller import BehaviorController
 
 
 class CharacterWindow(QWidget):
@@ -23,6 +24,9 @@ class CharacterWindow(QWidget):
 
     ai_request = Signal(str)
     voice_request = Signal(str, str)
+
+    
+    browser_context_for_ai = Signal(object)
 
     SCALE = 4
 
@@ -52,6 +56,9 @@ class CharacterWindow(QWidget):
             self.ai_worker.process
         )
 
+        self.browser_context_for_ai.connect(
+            self.ai_worker.update_browser_context
+        )
         self.ai_worker.finished.connect(
             self.handle_ai_response
         )
@@ -222,6 +229,11 @@ class CharacterWindow(QWidget):
             self.permissions,
         )
 
+        self.behavior_controller = BehaviorController()
+
+        self.browser_bridge.event_received.connect(
+        self.handle_browser_event
+            )
         # Temporary: allow browser title + URL context.
         # Page reading and browser actions remain disabled.
         self.permissions.grant(
@@ -231,13 +243,8 @@ class CharacterWindow(QWidget):
         self.browser_bridge.start()
 
         # Debug browser context while testing.
-        self.browser_debug_timer = QTimer(self)
 
-        self.browser_debug_timer.timeout.connect(
-            self.debug_browser_context
-        )
-
-        self.browser_debug_timer.start(2000)
+        
 
 
     # =========================================================
@@ -752,28 +759,50 @@ class CharacterWindow(QWidget):
         event,
     ):
 
-        self.ai_thread.quit()
+        self.browser_bridge.stop()
 
+        self.ai_thread.quit()
         self.ai_thread.wait()
 
         self.voice_thread.quit()
-
         self.voice_thread.wait()
 
         event.accept()
 
 
-    def debug_browser_context(self):
-        context = self.browser_context
+    def handle_browser_event(self, event):
 
-        if not context.is_available():
+        print(
+        "BROWSER EVENT:",
+        event.event_type.value,
+        "|",
+        event.title,
+        "|",
+        event.url,
+    )
+       
+        self.browser_context_for_ai.emit(
+      {
+        "browser": event.browser,
+        "title": event.title,
+        "url": event.url,
+        "previous_title": event.previous_title,
+        "previous_url": event.previous_url,
+    }
+)
+
+        reaction = (
+        self.behavior_controller.handle_browser_event(
+            event
+        )
+    )
+
+        if reaction is None:
             return
 
         print(
-            "BROWSER CONTEXT:",
-            context.browser,
-            "|",
-            context.title,
-            "|",
-            context.url,
-            )
+        "HORNET REACTION:",
+        reaction,
+    )
+
+        self.say(reaction)

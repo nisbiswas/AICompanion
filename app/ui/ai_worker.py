@@ -25,3 +25,17 @@ class AIWorker(QObject):
 
         except Exception as exc:
             self.error.emit(str(exc))
+
+    @Slot(object)
+    def update_browser_context(
+        self,
+        browser_context: dict,
+    ):
+
+        try:
+            self.controller.set_browser_context(
+                browser_context
+            )
+
+        except Exception as exc:
+            self.error.emit(str(exc))

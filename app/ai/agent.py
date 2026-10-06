@@ -29,6 +29,34 @@ class CompanionAgent:
 
         self.context = ConversationContext()
 
+        self.browser_context = {}
+
+        self.context = ConversationContext()
+
+        self.browser_context = {}
+
+    def set_browser_context(self, browser_context: dict):
+        self.browser_context = dict(browser_context)
+
+    def _build_browser_context(self) -> str:
+
+        if not self.browser_context:
+            return (
+                "No browser context is currently available."
+            )
+
+        return (
+            "Current browser context:\n"
+            f"Browser: {self.browser_context.get('browser', '')}\n"
+            f"Page title: {self.browser_context.get('title', '')}\n"
+            f"URL: {self.browser_context.get('url', '')}\n\n"
+            "This is browser metadata only. "
+            "You can see the browser, page title, and URL, "
+            "but you cannot see page contents, images, videos, "
+            "comments, or other page data unless the user grants "
+            "page-read permission."
+        )
+
     def _build_memory_context(self) -> str:
 
         facts = self.memory.get_facts()
@@ -41,9 +69,50 @@ class CompanionAgent:
             for fact in facts
         )
 
+    def _build_browser_context(self) -> str:
+
+        if not self.browser_context:
+            return (
+                "No browser context is currently available."
+            )
+
+        browser = self.browser_context.get(
+            "browser",
+            "",
+        )
+
+        title = self.browser_context.get(
+            "title",
+            "",
+        )
+
+        url = self.browser_context.get(
+            "url",
+            "",
+        )
+
+        if not browser and not title and not url:
+            return (
+                "No browser context is currently available."
+            )
+
+        return (
+            "Current browser context:\n"
+            f"Browser: {browser}\n"
+            f"Page title: {title}\n"
+            f"URL: {url}\n\n"
+            "This is browser metadata only. "
+            "You can see the browser, page title, and URL, "
+            "but you cannot see the contents of the page, "
+            "images, videos, comments, or other page data "
+            "unless the user explicitly grants page-read "
+            "permission."
+        )
+
     def _build_messages(self) -> list[dict]:
 
         memory_context = self._build_memory_context()
+        browser_context = self._build_browser_context()
 
         messages = [
             {
@@ -56,6 +125,14 @@ class CompanionAgent:
                     "Known memories about the user:\n"
                     f"{memory_context}"
                 ),
+            },
+            {
+                "role": "system",
+                "content": browser_context,
+            },
+            {
+                "role": "system",
+                "content": self._build_browser_context(),
             },
         ]
 
@@ -101,38 +178,34 @@ class CompanionAgent:
                 data.get("voice_line", "")
             ).strip()
 
-            # If the model doesn't provide a voice line,
-            # create a short spoken version from the response.
-            #
-            # This keeps the voice pipeline working even if
-            # the local model occasionally omits the optional
-            # voice field.
             if not voice_line:
-                print("WARNING: Qwen did not provide a voice_line.")
+                print(
+                    "WARNING: Qwen did not provide a voice_line."
+                )
 
             return AgentResponse(
                 response=response_text,
 
                 state=AgentState(
                     data.get(
-                    "state",
-                    "TALKING",
-                 )
+                        "state",
+                        "TALKING",
+                    )
                 ),
 
                 intent=AgentIntent(
                     data.get(
-                    "intent",
-                    "CONVERSATION",
+                        "intent",
+                        "CONVERSATION",
                     )
                 ),
 
                 permission_required=bool(
-                data.get(
-                    "permission_required",
-                    False,
-                )
-            ),
+                    data.get(
+                        "permission_required",
+                        False,
+                    )
+                ),
 
                 voice_line=voice_line,
 
@@ -144,13 +217,13 @@ class CompanionAgent:
                 ),
 
                 tool_request=data.get(
-                "tool_request"
+                    "tool_request"
                 ),
 
                 emotion=AgentEmotion(
                     data.get(
-                    "emotion",
-                    "NEUTRAL",
+                        "emotion",
+                        "NEUTRAL",
                     )
                 ),
             )
@@ -162,16 +235,11 @@ class CompanionAgent:
         ) as error:
 
             print(
-            "========== RESPONSE PARSE ERROR =========="
+                "========== RESPONSE PARSE ERROR =========="
             )
-            print(
-            "RAW RESPONSE:"
-            )
+            print("RAW RESPONSE:")
             print(raw_response)
-            print(
-                "ERROR:",
-                error,
-            )
+            print("ERROR:", error)
             print(
                 "==========================================="
             )
