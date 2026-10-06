@@ -240,6 +240,10 @@ class CharacterWindow(QWidget):
             Permission.BROWSER_CONTEXT
         )
 
+        self.permissions.grant(
+            Permission.BROWSER_PAGE_READ
+        )
+
         self.browser_bridge.start()
 
         # Debug browser context while testing.
@@ -786,6 +790,7 @@ class CharacterWindow(QWidget):
         "browser": event.browser,
         "title": event.title,
         "url": event.url,
+        "page_text":event.page_text,
         "previous_title": event.previous_title,
         "previous_url": event.previous_url,
     }

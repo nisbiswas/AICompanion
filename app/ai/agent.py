@@ -91,22 +91,34 @@ class CompanionAgent:
             "",
         )
 
+        page_text = self.browser_context.get(
+            "page_text",
+            "",
+            )
         if not browser and not title and not url:
             return (
                 "No browser context is currently available."
             )
 
+        if page_text:
+            return (
+                "Current browser context:\n"
+                f"Browser: {browser}\n"
+                f"Page title: {title}\n"
+                f"Page text: {page_text}\n"
+                f"URL: {url}\n\n"
+                "Browser access is READ-ONLY. "
+                "You may use the visible page text to answer "
+                "the user's questions. "
+                "You cannot click, type, navigate, submit forms, "
+                "or otherwise interact with the browser."
+            )
         return (
             "Current browser context:\n"
             f"Browser: {browser}\n"
             f"Page title: {title}\n"
             f"URL: {url}\n\n"
-            "This is browser metadata only. "
-            "You can see the browser, page title, and URL, "
-            "but you cannot see the contents of the page, "
-            "images, videos, comments, or other page data "
-            "unless the user explicitly grants page-read "
-            "permission."
+            "No visible page text is currently available."
         )
 
     def _build_messages(self) -> list[dict]:
