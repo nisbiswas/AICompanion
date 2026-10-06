@@ -10,6 +10,9 @@ from app.ui.ai_worker import AIWorker
 from app.voice.worker import VoiceWorker
 from app.character.cursor_tracker import CursorTracker
 from PySide6.QtGui import QTransform
+from app.browser.context import BrowserContext
+from app.browser.bridge import BrowserBridge
+from app.permissions.manager import PermissionManager, Permission
 
 
 class CharacterWindow(QWidget):
@@ -205,9 +208,43 @@ class CharacterWindow(QWidget):
         
         self.cursor_tracker = CursorTracker(self)
         self.cursor_tracker.start()
+
+        # =====================================================
+        # BROWSER CONTEXT
+        # =====================================================
+
+        self.permissions = PermissionManager()
+
+        self.browser_context = BrowserContext()
+
+        self.browser_bridge = BrowserBridge(
+            self.browser_context,
+            self.permissions,
+        )
+
+        # Temporary: allow browser title + URL context.
+        # Page reading and browser actions remain disabled.
+        self.permissions.grant(
+            Permission.BROWSER_CONTEXT
+        )
+
+        self.browser_bridge.start()
+
+        # Debug browser context while testing.
+        self.browser_debug_timer = QTimer(self)
+
+        self.browser_debug_timer.timeout.connect(
+            self.debug_browser_context
+        )
+
+        self.browser_debug_timer.start(2000)
+
+
     # =========================================================
     # ANIMATION
     # =========================================================
+
+
     
     def set_facing_right(self, facing_right: bool):
         if self.facing_right == facing_right:
@@ -724,3 +761,19 @@ class CharacterWindow(QWidget):
         self.voice_thread.wait()
 
         event.accept()
+
+
+    def debug_browser_context(self):
+        context = self.browser_context
+
+        if not context.is_available():
+            return
+
+        print(
+            "BROWSER CONTEXT:",
+            context.browser,
+            "|",
+            context.title,
+            "|",
+            context.url,
+            )
