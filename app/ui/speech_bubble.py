@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import (
     QWidget,
-    QLabel,
+    QTextEdit,
     QVBoxLayout,
     QFrame,
     QGraphicsDropShadowEffect,
@@ -29,6 +29,10 @@ class SpeechBubble(QWidget):
         self.drag_offset = QPoint()
         self.has_been_positioned = False
 
+        # ---------------------------------------------------------
+        # CONTAINER
+        # ---------------------------------------------------------
+
         self.container = QFrame(self)
         self.container.setObjectName("speechContainer")
 
@@ -47,14 +51,34 @@ class SpeechBubble(QWidget):
 
         self.container.setGraphicsEffect(shadow)
 
-        self.text = QLabel()
-        self.text.setWordWrap(True)
-        self.text.setAlignment(
-            Qt.AlignLeft | Qt.AlignVCenter
+        # ---------------------------------------------------------
+        # TEXT
+        # ---------------------------------------------------------
+
+        self.text = QTextEdit()
+
+        self.text.setReadOnly(True)
+        self.text.setUndoRedoEnabled(False)
+
+        self.text.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+            | Qt.TextSelectableByKeyboard
         )
 
+        self.text.setFocusPolicy(Qt.StrongFocus)
+
+        self.text.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
+
+        self.text.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )
+
+        self.text.setFrameStyle(QFrame.NoFrame)
+
         self.text.setStyleSheet("""
-            QLabel {
+            QTextEdit {
                 color: #F2F2F5;
                 background: transparent;
                 border: none;
@@ -64,6 +88,10 @@ class SpeechBubble(QWidget):
             }
         """)
 
+        # ---------------------------------------------------------
+        # LAYOUT
+        # ---------------------------------------------------------
+
         self.layout = QVBoxLayout(self.container)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.text)
@@ -72,6 +100,7 @@ class SpeechBubble(QWidget):
         outer_layout.setContentsMargins(8, 8, 8, 8)
         outer_layout.addWidget(self.container)
 
+        # Width is fixed, but height is allowed to change freely.
         self.setFixedWidth(self.WIDTH)
 
         self.hide()
@@ -81,17 +110,40 @@ class SpeechBubble(QWidget):
     # ---------------------------------------------------------
 
     def say(self, message: str):
-        self.text.setText(message)
+        message = str(message).strip()
 
-        self.text.adjustSize()
+        self.text.setPlainText(message)
 
-        document_height = self.text.height() + 36
+        # Available width for the QTextEdit document.
+        text_width = (
+            self.WIDTH
+            - 16
+            - 44
+        )
+
+        document = self.text.document()
+        document.setTextWidth(text_width)
+
+        # Let Qt calculate the actual wrapped document height.
+        document_height = (
+            document.documentLayout()
+            .documentSize()
+            .height()
+        )
+
+        # QTextEdit padding.
+        content_height = document_height + 36
 
         height = max(
             self.MIN_HEIGHT,
-            min(document_height, self.MAX_HEIGHT),
+            min(
+                int(content_height + 8),
+                self.MAX_HEIGHT,
+            ),
         )
 
+        # Do not set minimum and maximum height here.
+        # That was causing contradictory Qt geometry warnings.
         self.setFixedHeight(height)
 
         self.show()
@@ -108,27 +160,43 @@ class SpeechBubble(QWidget):
             return
 
         available = screen.availableGeometry()
-
         character_rect = character_window.frameGeometry()
 
         # Prefer above Hornet.
-        x = character_rect.center().x() - self.width() // 2
-        y = character_rect.top() - self.height() - 15
+        x = (
+            character_rect.center().x()
+            - self.width() // 2
+        )
+
+        y = (
+            character_rect.top()
+            - self.height()
+            - 15
+        )
 
         # Keep inside the screen horizontally.
         if x < available.left() + 10:
             x = available.left() + 10
 
         if x + self.width() > available.right() - 10:
-            x = available.right() - self.width() - 10
+            x = (
+                available.right()
+                - self.width()
+                - 10
+            )
 
-        # If there isn't room above Hornet, put it below.
+        # If there isn't room above Hornet,
+        # put the bubble below her.
         if y < available.top() + 10:
             y = character_rect.bottom() + 15
 
         # Final vertical safety.
         if y + self.height() > available.bottom() - 10:
-            y = available.bottom() - self.height() - 10
+            y = (
+                available.bottom()
+                - self.height()
+                - 10
+            )
 
         self.move(x, y)
 
@@ -151,12 +219,14 @@ class SpeechBubble(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragging = True
+
             self.drag_offset = (
                 event.globalPosition().toPoint()
                 - self.frameGeometry().topLeft()
             )
 
             self.raise_()
+
             event.accept()
             return
 
@@ -179,6 +249,7 @@ class SpeechBubble(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragging = False
+
             event.accept()
             return
 
