@@ -5,6 +5,7 @@ class Permission(str, Enum):
     BROWSER_CONTEXT = "browser_context"
     BROWSER_PAGE_READ = "browser_page_read"
     WEB_SEARCH = "web_search"
+    RESEARCH = "research"
     BROWSER_NAVIGATE = "browser_navigate"
     BROWSER_INTERACT = "browser_interact"
 
@@ -15,6 +16,7 @@ class PermissionManager:
             Permission.BROWSER_CONTEXT: False,
             Permission.BROWSER_PAGE_READ: False,
             Permission.WEB_SEARCH: False,
+            Permission.RESEARCH: False,
             Permission.BROWSER_NAVIGATE: False,
             Permission.BROWSER_INTERACT: False,
         }

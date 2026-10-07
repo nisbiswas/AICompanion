@@ -347,17 +347,25 @@ class CompanionAgent:
         if not user_message:
             return None
 
+        # -------------------------------------------------
+        # PERSIST USER MESSAGE
+        # -------------------------------------------------
+
         self.context.add_user_message(
             user_message
         )
+
+        # -------------------------------------------------
+        # TEMPORARY REQUEST CONTEXT
+        # -------------------------------------------------
+
+        messages = self._build_messages()
 
         max_tool_calls = 3
 
         response = None
 
         for _ in range(max_tool_calls):
-
-            messages = self._build_messages()
 
             raw_response = self.llm.chat(
                 messages
@@ -367,12 +375,25 @@ class CompanionAgent:
                 raw_response
             )
 
-            self.context.add_assistant_message(
-                raw_response
-            )
+            # -------------------------------------------------
+            # NO TOOL -> FINAL RESPONSE
+            # -------------------------------------------------
 
             if not response.tool_request:
+
+                self.context.add_assistant_message(
+                    raw_response
+                )
+
                 break
+
+            # -------------------------------------------------
+            # TOOL REQUEST
+            # -------------------------------------------------
+
+            tool_name = response.tool_request.get(
+                "tool"
+            )
 
             try:
 
@@ -386,20 +407,38 @@ class CompanionAgent:
                     f"Error executing tool: {error}"
                 )
 
-            self.context.add_user_message(
-                (
-                    "TOOL RESULT\n"
-                    f"Tool: "
-                    f"{response.tool_request.get('tool')}\n"
-                    f"Result:\n"
-                    f"{tool_result}\n\n"
-                    "Use this tool result to answer the "
-                    "original user request. "
-                    "If more information is needed, "
-                    "you may request another available "
-                    "read-only tool."
-                )
+            # -------------------------------------------------
+            # TEMPORARY TOOL CONTEXT
+            # -------------------------------------------------
+
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": raw_response,
+                }
             )
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "TOOL RESULT\n"
+                        f"Tool: "
+                        f"{tool_name}\n"
+                        f"Result:\n"
+                        f"{tool_result}\n\n"
+                        "Use this tool result to answer the "
+                        "original user request. "
+                        "If more information is needed, "
+                        "you may request another available "
+                        "read-only tool."
+                    ),
+                }
+            )
+
+        # -------------------------------------------------
+        # MEMORY
+        # -------------------------------------------------
 
         fact = self.memory_extractor.extract(
             user_message
