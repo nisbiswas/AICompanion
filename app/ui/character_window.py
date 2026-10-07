@@ -14,6 +14,7 @@ from app.browser.context import BrowserContext
 from app.browser.bridge import BrowserBridge
 from app.permissions.manager import PermissionManager, Permission
 from app.behavior.controller import BehaviorController
+from app.voice.stt_worker import STTWorker
 
 
 class CharacterWindow(QWidget):
@@ -24,6 +25,7 @@ class CharacterWindow(QWidget):
 
     ai_request = Signal(str)
     voice_request = Signal(str, str)
+    stt_request = Signal()
 
     
     browser_context_for_ai = Signal(object)
@@ -168,7 +170,12 @@ class CharacterWindow(QWidget):
         self.chat_input.cancelled.connect(
             self.hide_input
         )
-
+        self.chat_input.research_changed.connect(
+            self.set_research_enabled
+            )
+        self.chat_input.microphone_requested.connect(
+            self.handle_microphone_request
+        )
         # =====================================================
         # ANIMATION TIMER
         # =====================================================
@@ -205,9 +212,7 @@ class CharacterWindow(QWidget):
 
         QTimer.singleShot(
             700,
-            lambda: self.say(
-                "Hey! What are you doing?"
-            ),
+            self.startup_greeting,
         )
 
         QTimer.singleShot(
@@ -251,15 +256,40 @@ class CharacterWindow(QWidget):
             Permission.BROWSER_PAGE_READ
         )
 
-        self.permissions.grant(
-            Permission.WEB_SEARCH
-        )
+        # self.permissions.grant(
+        #     Permission.WEB_SEARCH
+        # )
 
         
         self.browser_bridge.start()
 
         # Debug browser context while testing.
 
+        # =====================================================
+        # STT WORKER THREAD
+        # =====================================================
+
+        self.stt_thread = QThread(self)
+
+        self.stt_worker = STTWorker()
+
+        self.stt_worker.moveToThread(
+            self.stt_thread
+        )
+
+        self.stt_request.connect(
+            self.stt_worker.listen
+        )
+
+        self.stt_worker.finished.connect(
+            self.handle_stt_result
+        )
+
+        self.stt_worker.error.connect(
+            self.handle_stt_error
+        )
+
+        self.stt_thread.start()
         
 
 
@@ -538,6 +568,30 @@ class CharacterWindow(QWidget):
     # USER → AI
     # =========================================================
 
+
+    def set_research_enabled(self, enabled: bool):
+
+        if enabled:
+            self.permissions.grant(
+                Permission.WEB_SEARCH
+            )
+        else:
+            self.permissions.revoke(
+                Permission.WEB_SEARCH
+            )
+
+        print(
+            "RESEARCH:",
+            "ON" if enabled else "OFF",
+        )
+
+        print(
+            "WEB_SEARCH:",
+            self.permissions.is_allowed(
+                Permission.WEB_SEARCH
+            ),
+        )
+
     def handle_user_message(
         self,
         text: str,
@@ -608,9 +662,13 @@ class CharacterWindow(QWidget):
         # =====================================================
         # NORMAL AI REQUEST
         # =====================================================
-
+        
         self.say(
-            "Hmm..."
+            "Hmmm.."
+        )
+        self.voice_request.emit(
+            "Hmm....Taking a look",
+            "THINKING",
         )
 
         self.ai_request.emit(
@@ -786,6 +844,9 @@ class CharacterWindow(QWidget):
         self.voice_thread.quit()
         self.voice_thread.wait()
 
+        self.stt_thread.quit()
+        self.stt_thread.wait()
+
         event.accept()
 
 
@@ -826,3 +887,88 @@ class CharacterWindow(QWidget):
     )
 
         self.say(reaction)
+
+    def startup_greeting(self):
+
+        greeting="Hey, How are you doing ?"
+
+        self.say(
+            greeting
+                )        
+        self.voice_request.emit(
+            greeting,
+            "HAPPY"
+        )
+
+    # =========================================================
+    # MICROPHONE / STT
+    # =========================================================
+
+    def handle_microphone_request(self):
+
+        print(
+            "MICROPHONE: Listening..."
+        )
+
+        self.chat_input.set_microphone_enabled(
+            False
+        )
+
+        self.chat_input.input.setPlaceholderText(
+            "Listening..."
+        )
+
+        self.stt_request.emit()
+
+    def handle_stt_result(
+        self,
+        text: str,
+    ):
+
+        self.chat_input.set_microphone_enabled(
+            True
+        )
+
+        self.chat_input.input.setPlaceholderText(
+            "Speak to Hornet..."
+        )
+
+        text = text.strip()
+
+        print(
+            "STT RESULT:",
+            repr(text),
+        )
+
+        if not text:
+            return
+
+        self.chat_input.input.setText(
+            text
+        )
+
+        self.chat_input.submit()
+
+    def handle_stt_error(
+        self,
+        error: str,
+    ):
+
+        self.chat_input.set_microphone_enabled(
+            True
+        )
+
+        self.chat_input.input.setPlaceholderText(
+            "Speak to Hornet..."
+        )
+
+        print(
+            "========== STT ERROR =========="
+        )
+
+        print(error)
+
+        print(
+            "==============================="
+        )
+

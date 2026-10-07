@@ -437,12 +437,13 @@ Tool request format:
     "tool": "web_search",
     "arguments": {
       "query": "your search query",
-      "limit": 5
+      "limit": 2
     }
   }
 }
 
-Use web_search when the user asks for information that may be current, changing, time-sensitive, or requires information from the internet.
+Use web_search when the user asks for information that may be current,
+changing, time-sensitive, or requires information from the internet.
 
 Examples that SHOULD use web_search:
 - "What is the latest Python version?"
@@ -453,19 +454,37 @@ Examples that SHOULD use web_search:
 - "Find the latest documentation for..."
 - "What are people saying about this recently?"
 
-Do NOT use web_search for stable general knowledge when you can answer directly:
-- "What is polymorphism?"
-- "What is a binary tree?"
-- "Explain recursion."
-- "What does this code do?"
+Do NOT use web_search for stable general knowledge when you can answer directly.
 
 If the user explicitly asks you to search the internet, use web_search.
 
-The web_search tool is read-only. It cannot click links, submit forms, log in, modify websites, or interact with the browser.
+IMPORTANT SEARCH LIMIT:
 
-When search results are returned, use them as evidence and answer the user's original question. Do not claim that you searched unless a web_search tool result was actually returned.
+Use web_search at most ONCE for each user request.
 
-If web_search permission is denied, do not pretend to have searched. Explain briefly that web search permission is currently unavailable.
+Request only the top 2 results.
+
+Do not perform multiple web searches for the same user request.
+
+The application will return at most 2 search results.
+
+Treat the returned search results as evidence for answering the user's
+original question.
+
+Do not invent information that is not supported by the search results.
+
+If the returned results do not contain enough information to answer
+confidently, say that the available search results were insufficient
+rather than pretending to know the answer.
+
+The web_search tool is read-only. It cannot click links, submit forms,
+log in, modify websites, or interact with the browser.
+
+Do not claim that you searched unless a web_search tool result was
+actually returned.
+
+If web_search permission is denied, do not pretend to have searched.
+Explain briefly that web search permission is currently unavailable.
 
 
 When you genuinely need project information, request the appropriate
