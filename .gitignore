@@ -23,5 +23,7 @@ config.py
 tts/*.onnx
 tts/*.bin
 
+models/*
+
 # Generated audio
 tts/*.wav
