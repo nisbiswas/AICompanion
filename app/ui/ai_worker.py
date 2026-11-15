@@ -37,6 +37,13 @@ class AIWorker(QObject):
 
             self.error.emit(str(exc))
 
+    @Slot(str)
+    def generate_image(self, prompt: str):
+        try:
+            self.finished.emit(self.controller.agent.generate_image(prompt))
+        except Exception as exc:
+            self.error.emit(str(exc))
+
     @Slot(object)
     def update_browser_context(
         self,

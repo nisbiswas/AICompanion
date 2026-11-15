@@ -57,6 +57,11 @@ async function sendContext(tab, force = false) {
     if (!tab.url) {
         return;
     }
+    // Background tabs must not replace the page the user is viewing.
+    const activeTabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+    if (!activeTabs.length || activeTabs[0].id !== tab.id) {
+        return;
+    }
 
     const url = tab.url;
     const title = tab.title || "";
@@ -197,3 +202,20 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(
         }
     }
 );
+
+// Refresh dynamic page text, recover when Hornet starts after Chrome, and
+// follow focus changes between browser windows.
+async function refreshActiveContext() {
+    try {
+        const tabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+        if (tabs.length) await sendContext(tabs[0], true);
+    } catch (error) {
+        // A window can close while being queried.
+    }
+}
+chrome.windows.onFocusChanged.addListener(refreshActiveContext);
+chrome.alarms.create("hornet-context", {periodInMinutes: 0.5});
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "hornet-context") refreshActiveContext();
+});
+refreshActiveContext();

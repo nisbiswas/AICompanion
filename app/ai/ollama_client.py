@@ -31,7 +31,8 @@ RESPONSE_SCHEMA = {
                 "CLARIFICATION",
                 "CODE_ANALYSIS",
                 "CODE_CHANGE",
-                "GENERAL_QUESTION"
+                "GENERAL_QUESTION",
+                "IMAGE_GENERATION"
             ]
         },
         "permission_required": {
@@ -77,13 +78,21 @@ class OllamaClient:
         self.model = model
         self.base_url = base_url
 
-    def chat(self, messages: list[dict]) -> str:
+    def unload(self):
+        response = httpx.post(
+            f"{self.base_url}/api/generate",
+            json={"model": self.model, "keep_alive": 0, "stream": False},
+            timeout=120.0,
+        )
+        response.raise_for_status()
+
+    def chat(self, messages: list[dict], schema: dict | None = None) -> str:
 
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "format": RESPONSE_SCHEMA,
+            "format": schema if schema is not None else RESPONSE_SCHEMA,
         }
 
         response = httpx.post(
