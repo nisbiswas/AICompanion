@@ -58,9 +58,9 @@ class BrowserBridge(QObject):
                         body.decode("utf-8")
                     )
 
-                    page_text = str(
-                        data.get("page_text", "")
-                        )
+                    page_text = ""
+                    if permissions.is_allowed(Permission.BROWSER_PAGE_READ):
+                        page_text = str(data.get("page_text", ""))[:12000]
 
                     event = context.update(
                         browser=str(data.get("browser", "")),

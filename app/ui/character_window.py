@@ -15,6 +15,7 @@ from app.browser.bridge import BrowserBridge
 from app.permissions.manager import PermissionManager, Permission
 from app.behavior.controller import BehaviorController
 from app.voice.stt_worker import STTWorker
+from app.ui.image_preview import ImagePreview
 
 
 class CharacterWindow(QWidget):
@@ -24,6 +25,7 @@ class CharacterWindow(QWidget):
     # =========================================================
 
     ai_request = Signal(str)
+    image_request = Signal(str)
     voice_request = Signal(str, str)
     stt_request = Signal()
 
@@ -61,6 +63,9 @@ class CharacterWindow(QWidget):
         self.ai_request.connect(
             self.ai_worker.process
         )
+        self.image_request.connect(self.ai_worker.generate_image)
+        self.request_busy = False
+        self.image_previews = []
 
         self.browser_context_for_ai.connect(
             self.ai_worker.update_browser_context
@@ -166,6 +171,7 @@ class CharacterWindow(QWidget):
         self.chat_input.submitted.connect(
             self.handle_user_message
         )
+        self.chat_input.image_generation_requested.connect(self.handle_image_request)
 
         self.chat_input.cancelled.connect(
             self.hide_input
@@ -246,8 +252,8 @@ class CharacterWindow(QWidget):
         self.browser_bridge.event_received.connect(
         self.handle_browser_event
             )
-        # Temporary: allow browser title + URL context.
-        # Page reading and browser actions remain disabled.
+        # Read-only browser metadata and visible page text are enabled.
+        # Navigation and browser interactions remain disabled.
         self.permissions.grant(
             Permission.BROWSER_CONTEXT
         )
@@ -603,6 +609,9 @@ class CharacterWindow(QWidget):
 
         if not text:
             return
+        if self.request_busy:
+            self.say("I'm still working on your previous request.")
+            return
 
         # =====================================================
         # READ-ALOUD CONFIRMATION
@@ -671,9 +680,22 @@ class CharacterWindow(QWidget):
             "THINKING",
         )
 
+        self.request_busy = True
         self.ai_request.emit(
             text
         )
+
+    def handle_image_request(self, prompt: str):
+        if not prompt.strip():
+            return
+        if self.request_busy:
+            self.say("I'm still working on your previous request.")
+            return
+        self.hide_input()
+        self.pending_read_aloud_text = None
+        self.request_busy = True
+        self.say("Creating your image…")
+        self.image_request.emit(prompt)
 
     # =========================================================
     # AI → GUI
@@ -684,8 +706,19 @@ class CharacterWindow(QWidget):
         response,
     ):
 
+        self.request_busy = False
         if response is None:
             return
+
+        if response.image_path:
+            try:
+                preview = ImagePreview(response.image_path, self)
+                self.image_previews.append(preview)
+                preview.finished.connect(lambda _, item=preview: self.image_previews.remove(item))
+                preview.show()
+            except ValueError as exc:
+                self.say(str(exc))
+                return
 
 
         emotion = response.emotion.value
@@ -768,6 +801,7 @@ class CharacterWindow(QWidget):
         error: str,
     ):
 
+        self.request_busy = False
         self.pending_read_aloud_text = None
 
         self.say(

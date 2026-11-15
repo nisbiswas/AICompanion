@@ -7,6 +7,7 @@ class ChatInput(QWidget):
     cancelled = Signal()
     research_changed = Signal(bool)
     microphone_requested = Signal()
+    image_generation_requested = Signal(str)
 
     WIDTH = 420
     HEIGHT = 48
@@ -52,7 +53,7 @@ class ChatInput(QWidget):
                 border-radius: 14px;
 
                 padding-left: 16px;
-                padding-right: 128px;
+                padding-right: 174px;
 
                 font-family: "Segoe UI";
                 font-size: 17px;
@@ -116,6 +117,49 @@ class ChatInput(QWidget):
 
         self.microphone_button.clicked.connect(
             self.microphone_requested.emit
+        )
+
+
+        # =====================================================
+        # IMAGE GENERATION BUTTON
+        # =====================================================
+
+        self.image_button = QPushButton("▧", self)
+
+        self.image_button.setCheckable(True)
+        self.image_button.setFixedSize(32, 32)
+
+        self.image_button.move(
+            self.WIDTH - 172,
+            8,
+        )
+
+        self.image_button.setToolTip(
+            "Toggle image generation mode"
+        )
+
+        self.image_button.setStyleSheet("""
+            QPushButton {
+            background-color: rgba(55, 55, 65, 230);
+            color: #E8E8EF;
+            border: 1px solid rgba(190, 190, 205, 120);
+            border-radius: 10px;
+            font-size: 19px;
+        }
+
+        QPushButton:hover {
+            background-color: rgba(75, 75, 88, 240);
+        }
+
+        QPushButton:checked {
+            background-color: rgba(115, 85, 165, 245);
+            color: white;
+            border: 1px solid rgba(200, 175, 255, 220);
+        }
+        """)
+
+        self.image_button.toggled.connect(
+        self.on_image_mode_changed
         )
 
         # =====================================================
@@ -191,9 +235,14 @@ class ChatInput(QWidget):
 
         self.input.clear()
 
-        self.submitted.emit(
-            text
-        )
+        if self.image_button.isChecked():
+            self.image_generation_requested.emit(
+                text
+            )
+        else:
+            self.submitted.emit(
+                text
+            )
 
     # =========================================================
     # MICROPHONE
@@ -336,3 +385,20 @@ class ChatInput(QWidget):
             x,
             y,
         )
+
+    def on_image_mode_changed(self, enabled: bool):
+
+        if enabled:
+            self.input.setPlaceholderText(
+                "Describe the image you want to create..."
+            )
+
+            # Research is a chat feature, not an image setting.
+            self.research_button.setEnabled(False)
+
+        else:
+            self.input.setPlaceholderText(
+                "Speak to Hornet..."
+            )
+
+            self.research_button.setEnabled(True)

@@ -17,6 +17,7 @@ class AgentIntent(str, Enum):
     CODE_ANALYSIS = "CODE_ANALYSIS"
     CODE_CHANGE = "CODE_CHANGE"
     GENERAL_QUESTION = "GENERAL_QUESTION"
+    IMAGE_GENERATION = "IMAGE_GENERATION"
 
 
 class AgentEmotion(str, Enum):
@@ -42,3 +43,4 @@ class AgentResponse:
 
     tool_request: dict | None = None
     emotion: AgentEmotion = AgentEmotion.NEUTRAL
+    image_path: str | None = None

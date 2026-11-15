@@ -1,0 +1,10 @@
+# Install in image_engine/.venv, separately from the desktop application.
+# Install a CUDA-enabled PyTorch build suitable for your GPU first.
+diffusers>=0.42,<0.43
+transformers>=5.3,<6
+accelerate
+huggingface-hub
+safetensors
+sentencepiece
+protobuf
+Pillow
