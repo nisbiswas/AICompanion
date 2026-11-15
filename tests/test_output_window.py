@@ -2,7 +2,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import unittest
-from PySide6.QtCore import QPoint, Qt
+from unittest.mock import patch
+from PySide6.QtCore import QPoint, Qt, QUrl
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -93,3 +94,26 @@ class OutputWindowTests(unittest.TestCase):
         self.bubble.say(source)
         self.app.processEvents()
         self.assertIn("example.org", self.bubble.text.toPlainText())
+
+    def test_clicking_a_source_opens_browser_and_preserves_answer(self):
+        self.bubble.say("Sources:\n\n[Official documentation](https://example.org/docs)")
+        self.app.processEvents()
+        content = self.bubble.text.toPlainText()
+        viewport = self.bubble.text.viewport()
+        # Hit-test the rendered anchor, then exercise a real mouse click.
+        link_point = next((QPoint(x, y) for y in range(0, viewport.height(), 3)
+                           for x in range(0, viewport.width(), 3)
+                           if self.bubble.text.anchorAt(QPoint(x, y)) == "https://example.org/docs"), None)
+        self.assertIsNotNone(link_point)
+        with patch("app.ui.speech_bubble.QDesktopServices.openUrl", return_value=True) as open_url:
+            QTest.mouseClick(viewport, Qt.LeftButton, pos=link_point)
+            self.app.processEvents()
+            open_url.assert_called_once_with(QUrl("https://example.org/docs"))
+        self.assertEqual(self.bubble.text.toPlainText(), content)
+        self.assertTrue(self.bubble.text.textInteractionFlags() & Qt.TextSelectableByMouse)
+
+    def test_non_web_links_do_not_launch_local_apps(self):
+        with patch("app.ui.speech_bubble.QDesktopServices.openUrl") as open_url:
+            self.bubble.open_source_link(QUrl("file:///C:/Windows/notepad.exe"))
+            self.bubble.open_source_link(QUrl("javascript:alert(1)"))
+            open_url.assert_not_called()

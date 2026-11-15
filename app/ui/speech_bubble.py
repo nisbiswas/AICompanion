@@ -1,8 +1,8 @@
 from PySide6.QtCore import Qt, QPoint, QEvent, Signal
-from PySide6.QtGui import QTextOption
+from PySide6.QtGui import QTextOption, QDesktopServices, QPalette, QColor
 from app.ai.response import readable_reply, has_readable_text
 from PySide6.QtWidgets import (
-    QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
+    QWidget, QTextEdit, QTextBrowser, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
     QPushButton, QSizeGrip,
 )
 
@@ -72,10 +72,21 @@ class SpeechBubble(QWidget):
             header_layout.addWidget(button)
         content_layout.addWidget(self.header)
 
-        self.text = QTextEdit()
+        self.text = QTextBrowser()
         self.text.setReadOnly(True)
         self.text.setUndoRedoEnabled(False)
-        self.text.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.text.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+            | Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard
+        )
+        # Keep the answer in place; source links open in the default browser.
+        self.text.setOpenLinks(False)
+        self.text.setOpenExternalLinks(False)
+        self.text.anchorClicked.connect(self.open_source_link)
+        palette = self.text.palette()
+        palette.setColor(QPalette.Link, QColor("#9EC5FF"))
+        self.text.setPalette(palette)
+        self.text.document().setDefaultStyleSheet("a { color: #9EC5FF; text-decoration: underline; }")
         self.text.setFocusPolicy(Qt.StrongFocus)
         self.text.setFrameStyle(QFrame.NoFrame)
         self.text.setMinimumSize(0, 0)
@@ -172,6 +183,10 @@ class SpeechBubble(QWidget):
 
     def set_busy(self, busy):
         self.stop_button.setVisible(busy)
+
+    def open_source_link(self, url):
+        if url.isValid() and url.scheme().lower() in {"http", "https"} and url.host():
+            QDesktopServices.openUrl(url)
 
     def dismiss(self):
         self.hide()
