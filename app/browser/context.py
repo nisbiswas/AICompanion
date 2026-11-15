@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from threading import RLock
 from datetime import datetime
 
 from app.browser.events import BrowserEvent, BrowserEventType
@@ -6,11 +7,15 @@ from app.browser.events import BrowserEvent, BrowserEventType
 
 @dataclass
 class BrowserContext:
+    _lock: object = field(default_factory=RLock, repr=False, compare=False)
     browser: str = ""
     title: str = ""
     url: str = ""
     page_text: str = ""
     updated_at: str = ""
+    code_text: str = ""
+    selected_text: str = ""
+    capture_info: dict | None = None
 
     def update(
         self,
@@ -18,43 +23,57 @@ class BrowserContext:
         title: str,
         url: str,
         page_text: str = "",
+        code_text: str = "",
+        selected_text: str = "",
+        capture_info: dict | None = None,
     ) -> BrowserEvent | None:
 
-        previous_browser = self.browser
-        previous_title = self.title
-        previous_url = self.url
+        with self._lock:
+            previous_browser = self.browser
+            previous_title = self.title
+            previous_url = self.url
 
-        changed = (
-            browser != self.browser
-            or title != self.title
-            or url != self.url
-            or page_text != self.page_text
-        )
+            changed = (
+                browser != self.browser
+                or title != self.title
+                or url != self.url
+                or page_text != self.page_text
+                or code_text != self.code_text
+                or selected_text != self.selected_text
+            )
+            self.updated_at = datetime.now().isoformat()
+            self.capture_info = capture_info or {}
+            if not changed:
+                return None
 
-        if not changed:
-            return None
+            self.browser = browser
+            self.title = title
+            self.url = url
+            self.page_text = page_text
+            self.code_text = code_text
+            self.selected_text = selected_text
+            self.updated_at = datetime.now().isoformat()
 
-        self.browser = browser
-        self.title = title
-        self.url = url
-        self.page_text = page_text
-        self.updated_at = datetime.now().isoformat()
-
-        return BrowserEvent(
-            event_type=BrowserEventType.CONTEXT_CHANGED,
-            browser=browser,
-            title=title,
-            url=url,
-            page_text=page_text,
-            previous_title=previous_title,
-            previous_url=previous_url,
-        )
+            return BrowserEvent(
+                event_type=BrowserEventType.CONTEXT_CHANGED,
+                browser=browser,
+                title=title,
+                url=url,
+                page_text=page_text,
+                code_text=code_text,
+                selected_text=selected_text,
+                previous_title=previous_title,
+                previous_url=previous_url,
+            )
 
     def clear(self):
         self.browser = ""
         self.title = ""
         self.url = ""
         self.page_text = ""
+        self.code_text = ""
+        self.selected_text = ""
+        self.capture_info = {}
         self.updated_at = ""
 
     def is_available(self) -> bool:
@@ -65,10 +84,14 @@ class BrowserContext:
         )
 
     def as_dict(self) -> dict:
-        return {
-            "browser": self.browser,
-            "title": self.title,
-            "url": self.url,
-            "page_text": self.page_text,
-            "updated_at": self.updated_at,
-        }
+        with self._lock:
+            return {
+                "browser": self.browser,
+                "title": self.title,
+                "url": self.url,
+                "page_text": self.page_text,
+                "updated_at": self.updated_at,
+                "code_text": self.code_text,
+                "selected_text": self.selected_text,
+                "capture_info": self.capture_info,
+            }

@@ -15,6 +15,8 @@ class BrowserEvent:
     page_text: str = ""
     previous_title: str = ""
     previous_url: str = ""
+    code_text: str = ""
+    selected_text: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -25,5 +27,7 @@ class BrowserEvent:
             "page_text": self.page_text,
             "previous_title": self.previous_title,
             "previous_url": self.previous_url,
+            "code_text": self.code_text,
+            "selected_text": self.selected_text,
         }
 

@@ -1,221 +1,84 @@
 const BRIDGE_URL = "http://127.0.0.1:8766/context";
+let captureVersion = 0;
 
-const MAX_PAGE_TEXT = 12000;
-
-let lastSentUrl = "";
-let lastSentTitle = "";
-
-
-async function readPageText(tabId) {
-    try {
-        const results = await chrome.scripting.executeScript({
-            target: {
-                tabId: tabId
-            },
-            func: () => {
-                return document.body
-                    ? document.body.innerText
-                    : "";
+async function readPage(tabId) {
+    const results = await chrome.scripting.executeScript({
+        target: {tabId, allFrames: true}, world: "MAIN",
+        func: () => {
+            const visible = node => !!(node && node.getBoundingClientRect().width && node.getBoundingClientRect().height);
+            const main = document.querySelector("main, [role=main], article") || document.body;
+            const code = [];
+            // Text editors often store the complete document outside rendered DOM lines.
+            if (document.querySelector(".monaco-editor") && window.monaco?.editor) {
+                for (const model of window.monaco.editor.getModels()) {
+                    code.push(`[${model.getLanguageId()}]\n${model.getValue()}`);
+                }
             }
-        });
-
-        if (!results || !results.length) {
-            return "";
-        }
-
-        return results[0].result || "";
-
-    } catch (error) {
-        return "";
-    }
-}
-
-
-async function sendPayload(payload) {
-    try {
-        await fetch(
-            BRIDGE_URL,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
+            for (const node of document.querySelectorAll(".CodeMirror")) {
+                if (visible(node) && node.CodeMirror) code.push(node.CodeMirror.getValue());
             }
-        );
-    } catch (error) {
-        // Hornet may not be running.
-    }
+            for (const node of document.querySelectorAll(".cm-content")) {
+                if (visible(node)) code.push(node.cmView?.view?.state?.doc?.toString() || node.innerText);
+            }
+            for (const node of document.querySelectorAll(".ace_editor")) {
+                if (visible(node) && node.env?.editor) code.push(node.env.editor.getValue());
+            }
+            for (const node of document.querySelectorAll("textarea, pre")) {
+                if (visible(node)) code.push(node.value || node.innerText || "");
+            }
+            const raw = main?.innerText || "";
+            const fullCode = [...new Set(code.filter(Boolean))].join("\n\n");
+            return {page_text: raw.slice(0, 24000), code_text: fullCode.slice(0, 16000),
+                selected_text: window.getSelection()?.toString().slice(0, 4000) || "",
+                text_length: raw.length, code_length: fullCode.length,
+                truncated: raw.length > 24000 || fullCode.length > 16000};
+        }
+    });
+    const frames = results.filter(r => r.result).sort((a,b) => a.frameId - b.frameId).map(r => r.result);
+    const text = frames.map(r => r.page_text).join("\n\n");
+    const code = frames.map(r => r.code_text).filter(Boolean).join("\n\n");
+    return {page_text: text.slice(0, 24000), code_text: code.slice(0, 16000),
+        selected_text: frames.map(r => r.selected_text).filter(Boolean).join("\n").slice(0,4000),
+        text_length: frames.reduce((n,r) => n + r.text_length, 0),
+        code_length: frames.reduce((n,r) => n + r.code_length, 0),
+        truncated: frames.some(r => r.truncated) || text.length > 24000 || code.length > 16000};
 }
 
-
-async function sendContext(tab, force = false) {
-    if (!tab) {
-        return;
+async function sendContext(tab) {
+    if (!tab?.url) return;
+    const version = ++captureVersion;
+    let active = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+    if (!active.length || active[0].id !== tab.id) return;
+    let page = {page_text:"", code_text:"", selected_text:"", truncated:false};
+    if (/^https?:/.test(tab.url)) {
+        try { page = await readPage(tab.id); } catch (_) { page.capture_error = "Page text could not be read"; }
     }
-
-    if (!tab.url) {
-        return;
-    }
-    // Background tabs must not replace the page the user is viewing.
-    const activeTabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
-    if (!activeTabs.length || activeTabs[0].id !== tab.id) {
-        return;
-    }
-
-    const url = tab.url;
-    const title = tab.title || "";
-
-    /*
-     * Avoid browser internal pages.
-     */
-    if (
-        url.startsWith("chrome://") ||
-        url.startsWith("edge://") ||
-        url.startsWith("about:")
-    ) {
-        const payload = {
-            browser: "Chrome",
-            title: title,
-            url: url,
-            page_text: ""
-        };
-
-        await sendPayload(payload);
-        return;
-    }
-
-    /*
-     * Avoid sending the exact same URL/title repeatedly.
-     */
-    if (
-        !force &&
-        url === lastSentUrl &&
-        title === lastSentTitle
-    ) {
-        return;
-    }
-
-    const pageText = await readPageText(tab.id);
-
-    let limitedText = pageText;
-
-    if (limitedText.length > MAX_PAGE_TEXT) {
-        limitedText =
-            limitedText.substring(0, MAX_PAGE_TEXT);
-    }
-
-    lastSentUrl = url;
-    lastSentTitle = title;
-
-    const payload = {
-        browser: "Chrome",
-        title: title,
-        url: url,
-        page_text: limitedText
-    };
-
-    console.log(
-        "HORN ET PAGE:",
-        title,
-        "|",
-        url
-    );
-
-    await sendPayload(payload);
+    active = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    if (version !== captureVersion || !active.length || active[0].id !== tab.id || active[0].url !== tab.url) return;
+    try {
+        await fetch(BRIDGE_URL, {method:"POST", headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({browser:"Chrome", title:tab.title||"", url:tab.url,
+                tab_id:tab.id, captured_at:new Date().toISOString(), ...page})});
+    } catch (_) { /* Companion may not be running. */ }
 }
 
-
-/*
- * Normal tab activation.
- */
-chrome.tabs.onActivated.addListener(
-    async (activeInfo) => {
-
-        try {
-            const tab =
-                await chrome.tabs.get(
-                    activeInfo.tabId
-                );
-
-            await sendContext(
-                tab,
-                true
-            );
-
-        } catch (error) {
-            console.error(error);
-        }
-    }
-);
-
-
-/*
- * Normal navigation/title changes.
- */
-chrome.tabs.onUpdated.addListener(
-    async (tabId, changeInfo, tab) => {
-
-        if (
-            changeInfo.status === "complete" ||
-            changeInfo.title ||
-            changeInfo.url
-        ) {
-
-            await sendContext(
-                tab,
-                true
-            );
-        }
-    }
-);
-
-
-/*
- * Important for YouTube and other
- * single-page applications.
- *
- * YouTube can change videos without
- * performing a normal page navigation.
- */
-chrome.webNavigation.onHistoryStateUpdated.addListener(
-    async (details) => {
-
-        if (details.frameId !== 0) {
-            return;
-        }
-
-        try {
-
-            const tab =
-                await chrome.tabs.get(
-                    details.tabId
-                );
-
-            await sendContext(
-                tab,
-                true
-            );
-
-        } catch (error) {
-            console.error(error);
-        }
-    }
-);
-
-// Refresh dynamic page text, recover when Hornet starts after Chrome, and
-// follow focus changes between browser windows.
 async function refreshActiveContext() {
     try {
-        const tabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
-        if (tabs.length) await sendContext(tabs[0], true);
-    } catch (error) {
-        // A window can close while being queried.
-    }
+        const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+        if (tabs.length) await sendContext(tabs[0]);
+    } catch (_) { /* A tab/window can close while capturing. */ }
 }
-chrome.windows.onFocusChanged.addListener(refreshActiveContext);
-chrome.alarms.create("hornet-context", {periodInMinutes: 0.5});
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "hornet-context") refreshActiveContext();
+chrome.tabs.onActivated.addListener(refreshActiveContext);
+chrome.tabs.onUpdated.addListener((id, change, tab) => {
+    if (tab.active && (change.status === "complete" || change.title || change.url)) refreshActiveContext();
 });
+chrome.webNavigation.onHistoryStateUpdated.addListener(details => {
+    if (details.frameId === 0) refreshActiveContext();
+});
+chrome.windows.onFocusChanged.addListener(refreshActiveContext);
+chrome.runtime.onMessage.addListener((message, sender) => {
+    if (message.type === "hornet-page-changed" && sender.tab?.active) refreshActiveContext();
+});
+chrome.alarms.create("hornet-context", {periodInMinutes:0.5});
+chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === "hornet-context") refreshActiveContext(); });
 refreshActiveContext();

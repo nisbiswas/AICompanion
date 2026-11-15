@@ -1,6 +1,7 @@
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from uuid import uuid4
 
 import soundfile as sf
 from kokoro_onnx import Kokoro
@@ -14,7 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "kokoro-v1.0.onnx"
 VOICES_PATH = BASE_DIR / "voices-v1.0.bin"
 
-OUTPUT_PATH = BASE_DIR / "output.wav"
+OUTPUT_DIR = BASE_DIR / "audio"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 VOICE = "af_heart"
 SPEED = 1.0
@@ -71,8 +73,9 @@ class TTSHandler(BaseHTTPRequestHandler):
                 lang=LANG,
             )
 
+            output_path = OUTPUT_DIR / f"speech_{uuid4().hex}.wav"
             sf.write(
-                OUTPUT_PATH,
+                output_path,
                 samples,
                 sample_rate,
                 subtype="PCM_16",
@@ -80,8 +83,16 @@ class TTSHandler(BaseHTTPRequestHandler):
 
             response = {
                 "success": True,
-                "audio": str(OUTPUT_PATH),
+                "audio": str(output_path),
             }
+            # Clients copy their clip before playback. Keep a bounded server
+            # output directory rather than ever rewriting a WAV in use.
+            previous = sorted(OUTPUT_DIR.glob("speech_*.wav"), key=lambda path: path.stat().st_mtime, reverse=True)
+            for old in previous[64:]:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
 
             response_bytes = json.dumps(
                 response

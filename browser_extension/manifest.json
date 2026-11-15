@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Hornet Companion Bridge",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Connects browser context to the local Hornet companion.",
     "permissions": [
         "tabs",
@@ -15,5 +15,17 @@
     ],
     "background": {
         "service_worker": "background.js"
-    }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "http://*/*",
+                "https://*/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ]
 }

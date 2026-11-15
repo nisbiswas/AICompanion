@@ -1,61 +1,40 @@
 from PySide6.QtCore import QObject, Signal, Slot
-
 from app.character.controller import CharacterController
-from app.permissions.manager import PermissionManager
+from app.ai.cancellation import RequestCancelled, request_scope
 
 
 class AIWorker(QObject):
+    completed = Signal(object)
+    progress = Signal(str, str)
 
-    finished = Signal(object)
-    error = Signal(str)
-
-    def __init__(
-        self,
-        permissions: PermissionManager,
-    ):
+    def __init__(self, permissions):
         super().__init__()
-
-        self.controller = CharacterController(
-            permissions=permissions
-        )
-
-    @Slot(str)
-    def process(
-        self,
-        message: str,
-    ):
-
-        try:
-
-            response = self.controller.respond_to_user(
-                message
-            )
-
-            self.finished.emit(response)
-
-        except Exception as exc:
-
-            self.error.emit(str(exc))
-
-    @Slot(str)
-    def generate_image(self, prompt: str):
-        try:
-            self.finished.emit(self.controller.agent.generate_image(prompt))
-        except Exception as exc:
-            self.error.emit(str(exc))
+        self.controller = CharacterController(permissions=permissions)
 
     @Slot(object)
-    def update_browser_context(
-        self,
-        browser_context: dict,
-    ):
-
+    def execute(self, item):
+        agent = self.controller.agent
+        if item.token.cancelled:
+            self.completed.emit({"item": item, "cancelled": True})
+            return
+        checkpoint = agent.context.checkpoint()
         try:
-
-            self.controller.set_browser_context(
-                browser_context
-            )
-
+            with request_scope(item.token):
+                agent.set_browser_context(item.browser)
+                agent.progress_callback = lambda stage: self.progress.emit(item.id, stage)
+                if item.kind == "context":
+                    response = agent.react_to_browser()
+                elif item.kind == "image":
+                    response = agent.generate_image(item.text)
+                else:
+                    response = agent.respond(item.text)
+            self.completed.emit({"item": item, "response": response})
+        except RequestCancelled:
+            agent.context.rollback(checkpoint)
+            self.completed.emit({"item": item, "cancelled": True})
         except Exception as exc:
+            self.completed.emit({"item": item, "error": str(exc)})
 
-            self.error.emit(str(exc))
+    @Slot(str)
+    def remember_context_reply(self, reply):
+        self.controller.agent.context.add_assistant_message(reply)

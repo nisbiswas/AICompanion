@@ -1,5 +1,23 @@
 from dataclasses import dataclass
 from enum import Enum
+import re
+import unicodedata
+
+
+def has_readable_text(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    # A list marker such as '-' produces an empty Markdown bullet. HTML-only
+    # output can be similarly invisible. Emoji-only replies remain valid.
+    visible = re.sub(r"<[^>]*>", "", value)
+    return any(char.isalnum() or unicodedata.category(char) == "So" for char in visible)
+
+
+def readable_reply(text, voice_line="", *, allow_empty=False) -> str:
+    for candidate in (text, voice_line):
+        if has_readable_text(candidate):
+            return candidate.strip()
+    return "" if allow_empty else "I didn't produce a readable reply. Please try again."
 
 
 class AgentState(str, Enum):

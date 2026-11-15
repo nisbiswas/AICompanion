@@ -15,7 +15,13 @@ Good examples:
 - The user is building a Kafka broker in Python.
 - The user uses Windows.
 - The user prefers Python for this project.
+- The user's favorite flower is lavender.
+- The user's favorite dessert is pistachio ice cream.
+- The user enjoys Sekiro and gentle, quiet conversation.
 - The user is working on an AI desktop companion.
+
+Explicit preferences, favorite things, names and ongoing goals are useful stable
+facts even when unrelated to programming. Preserve them without inventing details.
 
 Do NOT store:
 - greetings
@@ -62,7 +68,12 @@ class MemoryExtractor:
             },
         ]
 
-        raw_response = self.llm.chat(messages)
+        raw_response = self.llm.chat(messages, schema={
+            "type": "object",
+            "properties": {"remember": {"type": "boolean"}, "fact": {"type": "string"}},
+            "required": ["remember", "fact"],
+            "additionalProperties": False,
+        })
 
         try:
             data = json.loads(raw_response)
