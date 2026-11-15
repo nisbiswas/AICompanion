@@ -167,7 +167,7 @@ class ChatInput(QWidget):
         # =====================================================
 
         self.research_button = QPushButton(
-            "Research",
+            "Research OFF",
             self,
         )
 
@@ -215,8 +215,9 @@ class ChatInput(QWidget):
         """)
 
         self.research_button.toggled.connect(
-            self.research_changed.emit
+            self.on_research_toggled
         )
+        self.research_button.setToolTip("Web search is OFF. Enable Research to check current information.")
 
         self.input.returnPressed.connect(
             self.submit
@@ -263,6 +264,14 @@ class ChatInput(QWidget):
 
     def research_enabled(self) -> bool:
         return self.research_button.isChecked()
+
+    def on_research_toggled(self, enabled):
+        self.research_button.setText("Research ON" if enabled else "Research OFF")
+        self.research_button.setToolTip(
+            "Web search is allowed; browser questions still use the active page."
+            if enabled else "Web search is OFF. Enable Research to check current information."
+        )
+        self.research_changed.emit(enabled)
 
     def set_research_enabled(self, enabled: bool):
 

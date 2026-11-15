@@ -27,6 +27,9 @@ models/*
 
 # Generated audio
 tts/*.wav
+tts/audio/
 
 # Images generated through the companion
 generated/images/hornet_*.png
+generated/images/hornet_*.json
+generated/quality_*

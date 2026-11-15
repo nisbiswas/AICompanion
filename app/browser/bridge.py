@@ -57,21 +57,31 @@ class BrowserBridge(QObject):
                     data = json.loads(
                         body.decode("utf-8")
                     )
+                    previous_capture = (context.capture_info or {}).get("captured_at")
+                    incoming_capture = data.get("captured_at")
+                    if previous_capture and incoming_capture and incoming_capture < previous_capture:
+                        self.send_response(204)
+                        self.end_headers()
+                        return
 
                     page_text = ""
                     if permissions.is_allowed(Permission.BROWSER_PAGE_READ):
-                        page_text = str(data.get("page_text", ""))[:12000]
+                        page_text = str(data.get("page_text", ""))[:24000]
+                    can_read = permissions.is_allowed(Permission.BROWSER_PAGE_READ)
 
                     event = context.update(
                         browser=str(data.get("browser", "")),
                         title=str(data.get("title", "")),
                         url=str(data.get("url", "")),
                         page_text=page_text,
+                        code_text=str(data.get("code_text", ""))[:16000] if can_read else "",
+                        selected_text=str(data.get("selected_text", ""))[:4000] if can_read else "",
+                        capture_info={key: data.get(key) for key in ("captured_at", "truncated", "text_length", "code_length", "capture_error")},
                     )
 
                     print(
-                        "PAGE TEXT:",
-                        page_text[:500].replace("\n"," ")
+                        "BROWSER CAPTURE:", len(page_text), "text characters;",
+                        len(context.code_text), "code characters; truncated:", bool(data.get("truncated"))
                     )
 
                     if event:

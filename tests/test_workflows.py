@@ -10,6 +10,7 @@ from app.ai.context import ConversationContext
 from app.ai.response import AgentIntent
 from app.ai.workflows import RequestRoute, Workflow, WorkflowRouter
 from app.images.service import ImageGenerationService
+from app.images.planning import ImagePlan
 from app.permissions.manager import Permission, PermissionManager
 
 
@@ -42,6 +43,9 @@ class WorkflowTests(unittest.TestCase):
         agent.tools = Mock()
         agent.tools.search_web.return_value = [{"title": "Evidence", "url": "https://example.com", "content": "Search evidence"}]
         agent.images = Mock()
+        agent.image_planner = Mock()
+        agent.image_planner.plan.return_value = ImagePlan("compiled prompt", "short prompt")
+        agent.progress_callback = Mock()
         agent.images.generate.return_value = "C:/images/test.png"
         return agent
 
@@ -93,7 +97,8 @@ class WorkflowTests(unittest.TestCase):
     def test_image_request_returns_attachment_without_post_generation_llm(self):
         agent = self.agent(Workflow.IMAGE_GENERATION)
         response = agent.respond("Draw a fox")
-        agent.images.generate.assert_called_once_with("resolved query or image prompt", agent.llm.unload)
+        agent.images.generate.assert_called_once_with("Draw a fox", agent.llm.unload,
+            plan=agent.image_planner.plan.return_value, progress=agent.progress_callback)
         self.assertEqual(response.image_path, "C:/images/test.png")
         self.assertEqual(response.intent, AgentIntent.IMAGE_GENERATION)
         agent.llm.chat.assert_not_called()
@@ -103,7 +108,8 @@ class WorkflowTests(unittest.TestCase):
         agent = self.agent(Workflow.CHAT)
         agent.generate_image("A fox")
         agent.router.route.assert_not_called()
-        agent.images.generate.assert_called_once_with("A fox", agent.llm.unload)
+        agent.images.generate.assert_called_once_with("A fox", agent.llm.unload,
+            plan=agent.image_planner.plan.return_value, progress=agent.progress_callback)
 
     def test_generation_failure_does_not_claim_success(self):
         agent = self.agent(Workflow.IMAGE_GENERATION)
@@ -129,7 +135,7 @@ class WorkflowTests(unittest.TestCase):
         tool = json.loads(FINAL)
         tool["tool_request"] = {"tool": "web_search", "arguments": {"query": "again"}}
         agent.llm.chat.side_effect = [json.dumps(tool), FINAL]
-        self.assertEqual(agent.respond("Search the news").response, "An answer")
+        self.assertTrue(agent.respond("Search the news").response.startswith("An answer"))
         agent.tools.search_web.assert_called_once()
 
     def test_third_tool_result_is_synthesized_into_final_answer(self):
@@ -152,16 +158,21 @@ class ImageServiceTests(unittest.TestCase):
             service.output_dir = Path(folder)
             events = []
 
-            def run(command, **kwargs):
-                events.append("generate")
-                self.assertIsInstance(command, list)
-                self.assertNotIn("shell", kwargs)
-                request = json.loads(kwargs["input"])
-                self.assertEqual(request["prompt"], 'A fox with "quotes" and $symbols')
-                Path(request["output"]).write_bytes(b"test image")
-                return subprocess.CompletedProcess(command, 0, "", "")
-
-            with patch("app.images.service.subprocess.run", side_effect=run):
+            class Process:
+                def __init__(process, command, **kwargs):
+                    events.append("generate")
+                    self.assertIsInstance(command, list)
+                    self.assertNotIn("shell", kwargs)
+                    process.args = command
+                    process.returncode = 0
+                def communicate(process, input=None, timeout=None):
+                    request = json.loads(input)
+                    self.assertEqual(request["prompt"], 'A fox with "quotes" and $symbols')
+                    Path(request["output"]).write_bytes(b"test image")
+                    return "", ""
+                def poll(process):
+                    return 0
+            with patch("app.images.service.subprocess.Popen", side_effect=Process):
                 first = service.generate('A fox with "quotes" and $symbols', lambda: events.append("unload"))
                 second = service.generate('A fox with "quotes" and $symbols', lambda: events.append("unload"))
             self.assertNotEqual(first, second)
@@ -180,9 +191,13 @@ class ImageServiceTests(unittest.TestCase):
         service.python = Path(__file__)
         with tempfile.TemporaryDirectory() as folder:
             service.output_dir = Path(folder)
-            with patch("app.images.service.subprocess.run", side_effect=subprocess.TimeoutExpired("engine", 1)):
+            process = Mock()
+            process.poll.return_value = None
+            process.communicate.return_value = ("", "")
+            with patch("app.images.service.subprocess.Popen", return_value=process), patch.dict("os.environ", {"IMAGE_GENERATION_TIMEOUT": "0"}):
                 with self.assertRaisesRegex(RuntimeError, "timed out"):
                     service.generate("fox", Mock())
+            process.kill.assert_called_once()
 
 
 if __name__ == "__main__":

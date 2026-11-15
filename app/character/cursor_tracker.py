@@ -7,7 +7,7 @@ class CursorTracker(QObject):
     def __init__(
         self,
         window,
-        follow_distance: int = 140,
+        follow_distance: int = 105,
         speed: float = 0.12,
     ):
         super().__init__(window)
@@ -56,4 +56,9 @@ class CursorTracker(QObject):
             - self.window.rect().center()
         )
 
+        screen = self.window.screen()
+        if screen:
+            area = screen.availableGeometry()
+            top_left.setX(max(area.left(), min(top_left.x(), area.right() - self.window.width() + 1)))
+            top_left.setY(max(area.top(), min(top_left.y(), area.bottom() - self.window.height() + 1)))
         self.window.move(top_left)

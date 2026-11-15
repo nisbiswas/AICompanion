@@ -1,4 +1,5 @@
 import time
+import os
 
 from app.browser.events import BrowserEvent
 
@@ -9,7 +10,7 @@ class BehaviorController:
         self.last_event = None
         self.last_reaction_time = 0.0
 
-        self.reaction_cooldown = 30.0
+        self.reaction_cooldown = float(os.getenv("CONTEXT_REACTION_COOLDOWN", "90"))
 
     def handle_browser_event(
         self,
@@ -41,6 +42,8 @@ class BehaviorController:
         title = event.title.lower()
 
         if not url and not title:
+            return False
+        if self.last_event and (self.last_event.url, self.last_event.title) == (event.url, event.title):
             return False
 
         if url.startswith("chrome://"):

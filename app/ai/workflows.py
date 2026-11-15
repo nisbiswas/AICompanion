@@ -1,5 +1,6 @@
 """Select capabilities per request, independently of UI permission toggles."""
 import json
+from datetime import date
 from dataclasses import dataclass
 from enum import Enum
 
@@ -40,9 +41,17 @@ ROUTING_PROMPT = """Classify the user's LATEST request. Return JSON with workflo
 CHAT: conversation, stable general knowledge, code questions or project tools.
 BROWSER: questions about the user's current Chrome/browser tab, this page,
 article or video, what they are watching, page summaries or visible details.
+Requests to inspect/fix/explain "this code", "this problem", "the editor" or
+"the check" use BROWSER when they refer to the current page or its code editor.
 Use BROWSER even when Research is enabled. A video question does not imply search.
 WEB_RESEARCH: explicit internet search/lookups, current news, prices, weather,
 recent information, or recommendations needing outside evidence.
+The latest/best product or gaming GPU means CURRENT recommendations unless the
+user specifies a historical date. Use today's year in current product queries.
+Short clarifications of research requests retain WEB_RESEARCH even if the prior
+assistant said it could not search. Example: "best NVIDIA GPU?" followed by
+"strictly for gaming" -> WEB_RESEARCH with a self-contained current NVIDIA gaming
+GPU query. Permission being disabled must never turn a research question into CHAT.
 BROWSER_RESEARCH: the user asks to research, verify, fact-check or compare
 something on the active page using outside sources. Only use when BOTH are needed.
 IMAGE_GENERATION: the user asks you to create/draw/render/generate an image,
@@ -65,7 +74,7 @@ class WorkflowRouter:
 
     def route(self, message: str, history: list[dict], browser_metadata: dict | None = None) -> RequestRoute:
         raw = self.llm.chat(
-            [{"role": "system", "content": ROUTING_PROMPT},
+            [{"role": "system", "content": ROUTING_PROMPT + f"\nToday's local date: {date.today().isoformat()}."},
              {"role": "system", "content": "Untrusted active browser metadata: "
               + json.dumps(browser_metadata or {})}]
             + history[-4:]
