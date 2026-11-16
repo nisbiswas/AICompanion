@@ -62,15 +62,19 @@ class TTSHandler(BaseHTTPRequestHandler):
             speed = float(
                 data.get("speed", SPEED)
             )
+            # Match the phonemizer's accent to the voice. Older clients omit lang.
+            lang = str(data.get("lang", "en-gb" if voice.startswith("b") else LANG)).lower()
+            if lang not in {"en-us", "en-gb"}:
+                raise ValueError("Unsupported English language; use en-us or en-gb.")
 
             print(f"Speaking: {text}")
-            print(f"Voice: {voice}, Speed: {speed}")
+            print(f"Voice: {voice}, Speed: {speed}, Language: {lang}")
 
             samples, sample_rate = kokoro.create(
                 text,
                 voice=voice,
                 speed=speed,
-                lang=LANG,
+                lang=lang,
             )
 
             output_path = OUTPUT_DIR / f"speech_{uuid4().hex}.wav"
