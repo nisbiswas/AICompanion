@@ -13,7 +13,7 @@ from threading import Event
 import time
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QObject, QThread, Slot
+from PySide6.QtCore import QEvent, QObject, QThread, Slot
 from PySide6.QtTest import QTest
 from app.ai.cancellation import CancellationToken
 from app.ai.response import AgentResponse, AgentState, AgentIntent
@@ -162,6 +162,11 @@ class VoiceUiTests(unittest.TestCase):
                 yield window
             finally:
                 window.close()
+                # Dispose native widgets on the GUI thread before a later
+                # test/worker allocation can trigger cyclic Python collection.
+                for widget in (window.companion, window.speech, window.chat_input, window):
+                    widget.deleteLater()
+                self.app.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_actual_submit_restores_ack_and_result_gestures_wait_for_audio(self):
         with self.window() as window:

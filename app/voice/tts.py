@@ -3,14 +3,16 @@ import hashlib
 from pathlib import Path
 from uuid import uuid4
 from app.ai.cancellation import run_async
+from app.voice.profile import VoiceProfile, language_for_voice
 
 
 TTS_URL = "http://127.0.0.1:8765/speak"
 
 
 class TTSClient:
-    def __init__(self, audio_dir=None):
+    def __init__(self, audio_dir=None, *, profile=None):
         self.url = TTS_URL
+        self.profile = profile or VoiceProfile.from_env()
         self.audio_dir = Path(audio_dir) if audio_dir else Path(__file__).resolve().parents[2] / "data/voice"
         self.owned = set()
         self.cached = set()
@@ -18,16 +20,20 @@ class TTSClient:
     def speak(
         self,
         text: str,
-        voice: str = "af_heart",
-        speed: float = 1.0,
+        voice: str | None = None,
+        speed: float | None = None,
         cache: bool = False,
+        lang: str | None = None,
     ):
         text = text.strip()
 
         if not text:
             return None
+        lang = lang or (language_for_voice(voice) if voice else self.profile.lang)
+        voice = voice or self.profile.voice
+        speed = self.profile.speed if speed is None else speed
         self.audio_dir.mkdir(parents=True, exist_ok=True)
-        key = hashlib.sha256(f"v1|{voice}|{speed}|{text}".encode()).hexdigest()
+        key = hashlib.sha256(f"v2|{voice}|{lang}|{speed}|{text}".encode()).hexdigest()
         destination = self.audio_dir / (f"cached_{key}.wav" if cache else f"speech_{uuid4().hex}.wav")
         if cache and destination.is_file():
             self.cached.add(str(destination))
@@ -35,7 +41,7 @@ class TTSClient:
 
         async def send():
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(self.url, json={"text": text, "voice": voice, "speed": speed})
+                response = await client.post(self.url, json={"text": text, "voice": voice, "speed": speed, "lang": lang})
                 response.raise_for_status()
                 return response.json()
         data = run_async(send)

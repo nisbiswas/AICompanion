@@ -15,6 +15,7 @@ class VoiceWorker(QObject):
         super().__init__()
 
         self.tts = TTSClient()
+        self.profile = self.tts.profile
         self.player = AudioPlayer()
 
     started = Signal(str)
@@ -63,20 +64,4 @@ class VoiceWorker(QObject):
             self.ended.emit(item["id"])
 
     def get_speed(self, emotion: str) -> float:
-        emotion = emotion.upper()
-
-        speeds = {
-            "NEUTRAL": 1.0,
-            "HAPPY": 1.08,
-            "SHY": 0.95,
-            "ANNOYED": 1.05,
-            "SAD": 0.88,
-            "CURIOUS": 1.02,
-            "SURPRISED": 1.12,
-            "THINKING": 0.92,
-        }
-
-        return speeds.get(
-            emotion,
-            1.0,
-        )
+        return self.profile.speed_for(emotion)

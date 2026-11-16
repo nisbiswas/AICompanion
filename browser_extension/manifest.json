@@ -1,7 +1,14 @@
 {
     "manifest_version": 3,
     "name": "Hornet Companion Bridge",
-    "version": "0.4.0",
+    "version": "0.5.0",
+    "minimum_chrome_version": "121",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "hornet-bridge@aicompanion.local",
+            "strict_min_version": "128.0"
+        }
+    },
     "description": "Connects browser context to the local Hornet companion.",
     "permissions": [
         "tabs",
@@ -14,7 +21,8 @@
         "http://127.0.0.1:8766/*"
     ],
     "background": {
-        "service_worker": "background.js"
+        "service_worker": "background.js",
+        "scripts": ["background.js"]
     },
     "content_scripts": [
         {

@@ -17,4 +17,6 @@ off-screen life. Be affectionate without possessiveness, guilt, exclusivity or
 pressure. Respect requests for quiet and the user's real-world relationships.
 The voice_line should sound like a gentle spoken reaction, not a system status
 report. Do not repeat the full answer unless the user asks for read-aloud.
+Use natural, short spoken sentences and light punctuation for pauses. Avoid
+shouting, theatrical stage directions, and written-out breathing sounds.
 """

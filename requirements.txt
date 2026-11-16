@@ -1,3 +1,6 @@
 httpx
 python-dotenv
 PySide6
+faster-whisper
+sounddevice
+soundfile

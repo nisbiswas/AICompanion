@@ -3,7 +3,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import unittest
 from unittest.mock import Mock, patch
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 
 from app.ui.character_window import CharacterWindow
@@ -36,6 +36,7 @@ class GenerationVoiceTests(unittest.TestCase):
         # Avoid CharacterWindow.closeEvent, which expects a running full app.
         self.window.image_voice_timer.stop()
         self.window.deleteLater()
+        self.app.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_image_stages_emit_voice_and_steps_do_not_spam(self):
         with patch("app.ui.character_window.time.monotonic", return_value=100):
@@ -99,6 +100,9 @@ class GenerationVoiceTests(unittest.TestCase):
                 self.assertFalse(window.request_busy)
             finally:
                 window.close()
+                for widget in (window.companion, window.speech, window.chat_input, window):
+                    widget.deleteLater()
+                self.app.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def test_actual_response_handler_displays_voice_when_body_is_a_dash(self):
         bubble = SpeechBubble()

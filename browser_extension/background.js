@@ -1,8 +1,10 @@
 const BRIDGE_URL = "http://127.0.0.1:8766/context";
+const extensionApi = typeof browser !== "undefined" ? browser : chrome;
+const browserName = typeof extensionApi.runtime.getBrowserInfo === "function" ? "Firefox" : "Chrome";
 let captureVersion = 0;
 
 async function readPage(tabId) {
-    const results = await chrome.scripting.executeScript({
+    const results = await extensionApi.scripting.executeScript({
         target: {tabId, allFrames: true}, world: "MAIN",
         func: () => {
             const visible = node => !!(node && node.getBoundingClientRect().width && node.getBoundingClientRect().height);
@@ -47,38 +49,42 @@ async function readPage(tabId) {
 async function sendContext(tab) {
     if (!tab?.url) return;
     const version = ++captureVersion;
-    let active = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+    // Each browser remembers a last-focused window even when another browser
+    // owns focus. Its alarms/DOM events must not overwrite that browser's page.
+    if (!(await extensionApi.windows.getLastFocused()).focused) return;
+    let active = await extensionApi.tabs.query({active: true, lastFocusedWindow: true});
     if (!active.length || active[0].id !== tab.id) return;
     let page = {page_text:"", code_text:"", selected_text:"", truncated:false};
     if (/^https?:/.test(tab.url)) {
         try { page = await readPage(tab.id); } catch (_) { page.capture_error = "Page text could not be read"; }
     }
-    active = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-    if (version !== captureVersion || !active.length || active[0].id !== tab.id || active[0].url !== tab.url) return;
+    active = await extensionApi.tabs.query({active:true,lastFocusedWindow:true});
+    const focused = (await extensionApi.windows.getLastFocused()).focused;
+    if (!focused || version !== captureVersion || !active.length || active[0].id !== tab.id || active[0].url !== tab.url) return;
     try {
         await fetch(BRIDGE_URL, {method:"POST", headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({browser:"Chrome", title:tab.title||"", url:tab.url,
+            body:JSON.stringify({browser:browserName, title:tab.title||"", url:tab.url,
                 tab_id:tab.id, captured_at:new Date().toISOString(), ...page})});
     } catch (_) { /* Companion may not be running. */ }
 }
 
 async function refreshActiveContext() {
     try {
-        const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+        const tabs = await extensionApi.tabs.query({active:true,lastFocusedWindow:true});
         if (tabs.length) await sendContext(tabs[0]);
     } catch (_) { /* A tab/window can close while capturing. */ }
 }
-chrome.tabs.onActivated.addListener(refreshActiveContext);
-chrome.tabs.onUpdated.addListener((id, change, tab) => {
+extensionApi.tabs.onActivated.addListener(refreshActiveContext);
+extensionApi.tabs.onUpdated.addListener((id, change, tab) => {
     if (tab.active && (change.status === "complete" || change.title || change.url)) refreshActiveContext();
 });
-chrome.webNavigation.onHistoryStateUpdated.addListener(details => {
+extensionApi.webNavigation.onHistoryStateUpdated.addListener(details => {
     if (details.frameId === 0) refreshActiveContext();
 });
-chrome.windows.onFocusChanged.addListener(refreshActiveContext);
-chrome.runtime.onMessage.addListener((message, sender) => {
+extensionApi.windows.onFocusChanged.addListener(refreshActiveContext);
+extensionApi.runtime.onMessage.addListener((message, sender) => {
     if (message.type === "hornet-page-changed" && sender.tab?.active) refreshActiveContext();
 });
-chrome.alarms.create("hornet-context", {periodInMinutes:0.5});
-chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === "hornet-context") refreshActiveContext(); });
+extensionApi.alarms.create("hornet-context", {periodInMinutes:0.5});
+extensionApi.alarms.onAlarm.addListener(alarm => { if (alarm.name === "hornet-context") refreshActiveContext(); });
 refreshActiveContext();
